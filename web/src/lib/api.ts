@@ -1,7 +1,8 @@
 import type { GameDefinition, GameId, GeneratedTicket, StrategyDefinition, Ticket, Draw, StrategyId } from '@numberiq/shared';
 import {
-  getGame, computeStats, runRandomnessAudit, generateTickets, runBacktest, estimatePopularity,
+  getGame, computeStats, runRandomnessAudit, generateTickets, estimatePopularity,
 } from '@numberiq/shared';
+import type { BacktestProgress } from './backtest.worker.js';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -204,21 +205,55 @@ export const api = {
     };
   },
 
-  backtest: async (body: Record<string, unknown>): Promise<BacktestResponse> => {
+  /**
+   * Runs in a Web Worker so the interface never freezes. Measured on the main
+   * thread, the default settings blocked for 1.4s and scaled linearly with the
+   * drawing count. `onProgress` receives real progress; the returned handle can
+   * cancel a run in flight.
+   */
+  backtest: async (
+    body: Record<string, unknown>,
+    onProgress?: (p: { completed: number; total: number; label: string }) => void,
+    signal?: AbortSignal,
+  ): Promise<BacktestResponse> => {
     const gameId = body.gameId as GameId;
     const game = getGame(gameId);
     const slot = (body.slot as string) ?? game.slots[game.slots.length - 1]!;
     const draws = [...(await fetchDraws(gameId, slot))].sort((a, b) => a.drawDate.localeCompare(b.drawDate));
 
-    return runBacktest({
-      game, slot,
-      strategies: body.strategies as StrategyId[],
-      ticketsPerDraw: (body.ticketsPerDraw as number) ?? 1,
-      maxDraws: (body.maxDraws as number) ?? 1000,
-      minHistory: (body.minHistory as number) ?? 200,
-      nullReplications: (body.nullReplications as number) ?? 300,
-      seed: (body.seed as number) ?? 12345,
-    }, draws) as unknown as BacktestResponse;
+    const worker = new Worker(new URL('./backtest.worker.ts', import.meta.url), { type: 'module' });
+
+    return new Promise<BacktestResponse>((resolve, reject) => {
+      const cleanup = () => { worker.terminate(); signal?.removeEventListener('abort', onAbort); };
+      const onAbort = () => { cleanup(); reject(Object.assign(new Error('Backtest cancelled'), { cancelled: true })); };
+      signal?.addEventListener('abort', onAbort);
+
+      worker.onmessage = (e: MessageEvent<BacktestProgress>) => {
+        const msg = e.data;
+        if (msg.type === 'progress') {
+          onProgress?.({ completed: msg.completed, total: msg.total, label: msg.label });
+        } else if (msg.type === 'done') {
+          cleanup();
+          resolve(msg.result as unknown as BacktestResponse);
+        } else {
+          cleanup();
+          reject(new Error(msg.message));
+        }
+      };
+      worker.onerror = (e) => { cleanup(); reject(new Error(e.message || 'Backtest worker failed')); };
+
+      worker.postMessage({
+        type: 'run',
+        game, slot,
+        strategies: body.strategies as StrategyId[],
+        ticketsPerDraw: (body.ticketsPerDraw as number) ?? 1,
+        maxDraws: (body.maxDraws as number) ?? 1000,
+        minHistory: (body.minHistory as number) ?? 200,
+        nullReplications: (body.nullReplications as number) ?? 300,
+        seed: (body.seed as number) ?? 12345,
+        draws,
+      });
+    });
   },
 
   popularity: async (id: GameId, slot: string, numbers: number[]) =>

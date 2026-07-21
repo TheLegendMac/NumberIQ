@@ -26,3 +26,13 @@ createRoot(container).render(
 
 // React has mounted — remove the boot fallback shown by index.html.
 document.getElementById('boot')?.remove();
+
+// Installable + offline. Registered after load so it never competes with the
+// first paint for bandwidth.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // A failed registration must never break the app; it only costs offline support.
+    });
+  });
+}

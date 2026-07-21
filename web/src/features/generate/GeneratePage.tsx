@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GameId, StrategyDefinition } from '@numberiq/shared';
+import { nextDrawingForSlot, formatCountdown, describeSchedule } from '@numberiq/shared';
 import { api, money, oneIn, slotLabel, type GameSummary, type GenerateResponse } from '../../lib/api.js';
 import { Button, Card, Chip, Field, Input, Notice, Select, Ball, Meter, ErrorBox, Fold } from '../../components/ui.js';
 import { Term } from '../../components/Term.js';
@@ -25,6 +26,12 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
   const [batchMode, setBatchMode] = useState<'independent' | 'low_overlap' | 'coverage'>('low_overlap');
   const [showRest, setShowRest] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Re-render once a minute so the countdown stays truthful.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const strategies = useQuery({ queryKey: ['strategies', gameId], queryFn: () => api.strategies(gameId) });
   const odds = useQuery({ queryKey: ['odds', gameId], queryFn: () => api.odds(gameId) });
@@ -35,12 +42,15 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
     strategies.data?.find((s) => s.id === strategy) ?? strategies.data?.[0];
 
   const generate = useMutation({
-    mutationFn: () =>
-      api.generate({
+    mutationFn: () => {
+      // Light haptic on supported devices — confirms the tap without a sound.
+      navigator.vibrate?.(12);
+      return api.generate({
         gameId, strategy: activeStrategy?.id ?? 'balanced', slot: currentSlot, count,
         exclude: parseNumbers(exclude), require: parseNumbers(require),
         batchMode, avoidTrivialPatterns: true,
-      }),
+      });
+    },
     onSuccess: () => setShowRest(false),
   });
 
@@ -51,17 +61,25 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
           gameId, numbers: t.numbers, extras: t.extras,
           strategy: activeStrategy?.id ?? 'balanced',
           score: t.score.total, cost: result.costPerTicket,
-          drawSlot: result.slot, targetDrawDate: null,
+          drawSlot: result.slot,
+          // Without a target drawing the tracker can never check the ticket, so
+          // it would sit "Pending" forever and ROI would never populate.
+          targetDrawDate: upcoming?.drawDate ?? null,
         })),
       ),
     onSuccess: (r) => {
-      setToast(`Saved ${r.saved} ticket${r.saved === 1 ? '' : 's'} to your tracker.`);
+      setToast(
+        upcoming
+          ? `Saved ${r.saved} ticket${r.saved === 1 ? '' : 's'} for the ${upcoming.timeLabel} drawing.`
+          : `Saved ${r.saved} ticket${r.saved === 1 ? '' : 's'} to your tracker.`,
+      );
       void qc.invalidateQueries({ queryKey: ['tracker'] });
       void qc.invalidateQueries({ queryKey: ['tickets'] });
       setTimeout(() => setToast(null), 3200);
     },
   });
 
+  const upcoming = nextDrawingForSlot(gameId, currentSlot);
   const isFixed = game.payoutModel === 'fixed';
   const budget = settings.data?.budget;
   const result = generate.data;
@@ -84,6 +102,13 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
           <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
             {activeStrategy?.name ?? 'Balanced'} · {money(game.basePrice)} per ticket
           </p>
+          {upcoming && (
+            <div className="next-draw" title={describeSchedule(gameId)}>
+              <span className="next-draw-dot" aria-hidden="true" />
+              Next drawing {formatCountdown(upcoming.msUntil)}
+              <span className="next-draw-time">{upcoming.timeLabel}</span>
+            </div>
+          )}
         </div>
         <Button onClick={() => setShowControls(!showControls)} aria-expanded={showControls}>
           {showControls ? 'Done' : 'Change'}

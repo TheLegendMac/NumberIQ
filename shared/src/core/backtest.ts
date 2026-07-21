@@ -38,6 +38,11 @@ export interface BacktestConfig {
   /** Replications used to build the random null distribution. */
   nullReplications: number;
   seed: number;
+  /**
+   * Optional progress callback. The web build runs this in a Worker and reports
+   * real progress rather than an indeterminate spinner.
+   */
+  onProgress?: (phase: 'baseline' | 'strategies', completed: number, total: number) => void;
 }
 
 export interface StrategyResult {
@@ -181,16 +186,21 @@ export function runBacktest(cfg: BacktestConfig, allDraws: Draw[]): BacktestResu
   // --- Build the null distribution from independent random replications ----
   const nullRois: number[] = [];
   const rng = makeRng(cfg.seed);
+  const reportEvery = Math.max(1, Math.floor(cfg.nullReplications / 25));
   for (let r = 0; r < cfg.nullReplications; r++) {
     const res = runOne(cfg, 'random', draws, Math.floor(rng() * 2 ** 31), false);
     nullRois.push(res.roi);
+    if (cfg.onProgress && (r % reportEvery === 0 || r === cfg.nullReplications - 1)) {
+      cfg.onProgress('baseline', r + 1, cfg.nullReplications);
+    }
   }
   nullRois.sort((a, b) => a - b);
   const nullMean = mean(nullRois);
   const nullSd = stdev(nullRois);
 
   // --- Run each requested strategy once ------------------------------------
-  const strategies: StrategyResult[] = cfg.strategies.map((s) => {
+  const strategies: StrategyResult[] = cfg.strategies.map((s, i) => {
+    cfg.onProgress?.('strategies', i + 1, cfg.strategies.length);
     const base = runOne(cfg, s, draws, cfg.seed + 104_729, true);
     const pct = percentileRank(nullRois, base.roi);
     // Two-sided p-value from the empirical null.

@@ -43,14 +43,35 @@ function useHashRoute(): [Route, (r: Route) => void] {
 export function App() {
   const [route, go] = useHashRoute();
   const [gameId, setGameId] = useState<GameId>('fantasy5');
-  const [theme, setTheme] = useState<'dark' | 'light'>(
-    () => (localStorage.getItem('numberiq-theme') as 'dark' | 'light') ?? 'dark',
-  );
+  // Follow the OS on first run; an explicit toggle is remembered thereafter.
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('numberiq-theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  });
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('numberiq-theme', theme);
   }, [theme]);
+
+  // Keyboard shortcuts: 1-5 jump between sections, G generates.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+
+      const index = Number(e.key);
+      if (index >= 1 && index <= NAV.length) {
+        go(NAV[index - 1]!.id);
+        return;
+      }
+      if (e.key.toLowerCase() === 'g' && route !== 'generate') go('generate');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [route]);
 
   const games = useQuery({ queryKey: ['games'], queryFn: api.games, staleTime: 5 * 60_000 });
 
@@ -59,13 +80,13 @@ export function App() {
   return (
     <div className="shell">
       <nav className="rail" aria-label="Main">
-        <div className="brand">
+        <button className="brand" onClick={() => go('generate')} aria-label="NumberIQ — go to Generate">
           <span className="brand-mark" aria-hidden="true">IQ</span>
-          <div>
+          <span className="brand-text">
             NumberIQ
-            <div className="brand-sub">Florida · Local</div>
-          </div>
-        </div>
+            <span className="brand-sub">Florida Lottery</span>
+          </span>
+        </button>
         {NAV.map((n) => (
           <button
             key={n.id}
