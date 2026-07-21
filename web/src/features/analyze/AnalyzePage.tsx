@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { FrequencyTable } from './FrequencyTable.js';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, ReferenceLine } from 'recharts';
-import type { GameId } from '@numberiq/shared';
+import { primaryDrawSlot, type GameId } from '@numberiq/shared';
 import { api, dateLabel, slotLabel, type GameSummary } from '../../lib/api.js';
 import { Card, Chip, Field, Notice, Select, Skeleton, Tabs, EmptyState, Ball, Fold, ErrorBox } from '../../components/ui.js';
 import { Term, Reading } from '../../components/Term.js';
@@ -19,10 +19,10 @@ const tooltipStyle = {
 
 export function AnalyzePage({ games, gameId, setGameId }: Props) {
   const game = games.find((g) => g.id === gameId)!;
-  const [slot, setSlot] = useState(game.slots[game.slots.length - 1]!);
+  const [slot, setSlot] = useState(primaryDrawSlot(game));
   const [tab, setTab] = useState<Tab>('frequency');
 
-  const currentSlot = game.slots.includes(slot) ? slot : game.slots[game.slots.length - 1]!;
+  const currentSlot = game.slots.includes(slot) ? slot : primaryDrawSlot(game);
   const stats = useQuery({ queryKey: ['stats', gameId, currentSlot], queryFn: () => api.stats(gameId, currentSlot) });
   const audit = useQuery({
     queryKey: ['randomness', gameId, currentSlot],
@@ -51,7 +51,7 @@ export function AnalyzePage({ games, gameId, setGameId }: Props) {
               onChange={(e) => {
                 const next = e.target.value as GameId;
                 setGameId(next);
-                setSlot(games.find((x) => x.id === next)!.slots.slice(-1)[0]!);
+                setSlot(primaryDrawSlot(games.find((x) => x.id === next)!));
               }}
               style={{ minWidth: 180 }}
             >
@@ -68,7 +68,8 @@ export function AnalyzePage({ games, gameId, setGameId }: Props) {
           {s && (
             <div className="row-tight" style={{ marginLeft: 'auto' }}>
               <Chip tone="accent">{s.drawCount.toLocaleString()} drawings</Chip>
-              {s.first && <Chip>{dateLabel(s.first)} → {dateLabel(s.last!)}</Chip>}
+              {s.first && <Chip>History starts {dateLabel(s.first)}</Chip>}
+              {s.last && <Chip>Data current through {dateLabel(s.last)}</Chip>}
             </div>
           )}
         </div>

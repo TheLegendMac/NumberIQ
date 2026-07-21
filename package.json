@@ -27,7 +27,8 @@
     "d1:migrate": "wrangler d1 migrations apply numberiq --remote",
     "d1:export": "tsx server/src/cli/export-d1.ts",
     "d1:push": "wrangler d1 execute numberiq --remote --file=./data/d1-seed.sql",
-    "d1:seed": "npm run d1:migrate && npm run d1:export && npm run d1:push"
+    "d1:seed": "npm run d1:migrate && npm run d1:export && npm run d1:push",
+    "d1:verify": "tsx server/src/cli/verify-live-watermarks.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260721.1",

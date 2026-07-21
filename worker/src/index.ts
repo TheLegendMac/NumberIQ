@@ -16,7 +16,7 @@ import {
   expectedValuePerTicket, evLowerBound, evaluateTicket,
   saveTicketSchema, settingsSchema,
   type Draw, type GameId, type Ticket,
-  currentEraStart,
+  currentEraStart, primaryDrawSlot,
 } from '@numberiq/shared';
 import { ZodError } from 'zod';
 
@@ -85,7 +85,7 @@ function resolveSlot(gameId: GameId, requested: string | null): string {
   const game = getGame(gameId);
   return requested && game.slots.includes(requested)
     ? requested
-    : game.slots[game.slots.length - 1]!;
+    : primaryDrawSlot(game);
 }
 
 /** Check any saved ticket whose target drawing now exists. Idempotent. */
@@ -97,8 +97,9 @@ async function checkPending(env: Env): Promise<{ checked: number }> {
        JOIN draws d ON d.game_id = t.game_id
                    AND d.draw_slot = t.draw_slot
                    AND d.draw_date = t.target_draw_date
+       LEFT JOIN ticket_results r ON r.ticket_id = t.id AND r.draw_id = d.id
      WHERE t.target_draw_date IS NOT NULL
-       AND NOT EXISTS (SELECT 1 FROM ticket_results r WHERE r.ticket_id = t.id)`,
+       AND (r.ticket_id IS NULL OR r.checked_at < d.ingested_at)`,
   ).all<PendingTicketRow>();
 
   if (!results?.length) return { checked: 0 };
@@ -194,25 +195,40 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   if (path === '/games' && method === 'GET') {
     const { results } = await env.DB.prepare(
       `SELECT game_id, draw_slot AS slot, COUNT(*) AS count,
-              MIN(draw_date) AS first, MAX(draw_date) AS last
+              MIN(draw_date) AS first, MAX(draw_date) AS last,
+              MAX(ingested_at) AS updated_at
        FROM draws GROUP BY game_id, draw_slot`,
-    ).all<{ game_id: string; slot: string; count: number; first: string; last: string }>();
+    ).all<{
+      game_id: string; slot: string; count: number;
+      first: string; last: string; updated_at: string;
+    }>();
 
-    const byGame = new Map<string, Array<{ slot: string; count: number; first: string; last: string }>>();
+    const byGame = new Map<string, Array<{
+      slot: string; count: number; first: string; last: string; updatedAt: string;
+    }>>();
     for (const r of results ?? []) {
       const list = byGame.get(r.game_id) ?? [];
-      list.push({ slot: r.slot, count: r.count, first: r.first, last: r.last });
+      list.push({
+        slot: r.slot, count: r.count, first: r.first, last: r.last,
+        updatedAt: r.updated_at,
+      });
       byGame.set(r.game_id, list);
     }
 
-    return json(GAME_LIST.map((g) => ({
-      ...g,
-      strategies: strategiesForGame(g).map((s) => s.id),
-      expectedValue: expectedValuePerTicket(g),
-      expectedValueLowerBound: evLowerBound(g),
-      data: byGame.get(g.id) ?? [],
-      lastSync: null,
-    })));
+    return json(GAME_LIST.map((g) => {
+      const data = byGame.get(g.id) ?? [];
+      const updatedAt = data.map((row) => row.updatedAt).sort().at(-1) ?? null;
+      return {
+        ...g,
+        strategies: strategiesForGame(g).map((s) => s.id),
+        expectedValue: expectedValuePerTicket(g),
+        expectedValueLowerBound: evLowerBound(g),
+        data,
+        lastSync: updatedAt
+          ? { ran_at: updatedAt, added: 0, source: 'published:D1' }
+          : null,
+      };
+    }));
   }
 
   if (seg[0] === 'games' && seg[2] === 'odds' && method === 'GET') {
@@ -298,18 +314,26 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   if (seg[0] === 'data' && seg[1] && method === 'GET') {
     if (!isGameId(seg[1])) return bad(`Unknown game "${seg[1]}"`);
     const { results } = await env.DB.prepare(
-      `SELECT draw_slot AS slot, COUNT(*) AS count, MIN(draw_date) AS first, MAX(draw_date) AS last
+      `SELECT draw_slot AS slot, COUNT(*) AS count,
+              MIN(draw_date) AS first, MAX(draw_date) AS last,
+              MAX(ingested_at) AS updated_at
        FROM draws WHERE game_id = ? GROUP BY draw_slot`,
-    ).bind(seg[1]).all<{ slot: string; count: number; first: string; last: string }>();
+    ).bind(seg[1]).all<{
+      slot: string; count: number; first: string; last: string; updated_at: string;
+    }>();
+    const rows = results ?? [];
+    const updatedAt = rows.map((row) => row.updated_at).sort().at(-1) ?? null;
     return json({
-      summary: results ?? [],
+      summary: rows.map(({ updated_at: _updatedAt, ...row }) => row),
       // Gap analysis and PDF sync are local-only operations; see README.
-      gaps: (results ?? []).map((r) => ({
+      gaps: rows.map((r) => ({
         slot: r.slot, count: r.count, first: r.first, last: r.last,
         missing: [], outOfOrder: false, expectedPerWeek: 0,
         scanWindow: { from: r.first, to: r.last, note: 'Gap analysis runs in the local CLI, not on the hosted deployment.' },
       })),
-      lastSync: null,
+      lastSync: updatedAt
+        ? { ran_at: updatedAt, added: 0, source: 'published:D1' }
+        : null,
     });
   }
 

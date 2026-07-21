@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useMutation, useQueries, useQueryClient, useQuery } from '@tanstack/react-query';
 import type { GameId } from '@numberiq/shared';
 import { api, dateLabel, invalidateDraws, slotLabel, type GameSummary, type IngestReport } from '../../lib/api.js';
+import { latestDataDate } from '../../lib/gameData.js';
 import { Button, Card, Chip, Notice, Skeleton, ErrorBox } from '../../components/ui.js';
 
 export function DataPage({ games }: { games: GameSummary[] }) {
@@ -10,6 +11,7 @@ export function DataPage({ games }: { games: GameSummary[] }) {
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, staleTime: 5 * 60_000 });
   const hosted = health.data?.runtime === 'cloudflare-workers';
   const local = health.isSuccess && !hosted;
+  const dataThrough = latestDataDate(games.flatMap((g) => g.data));
   const [report, setReport] = useState<(IngestReport & { mapping?: Record<string, string> }) | null>(null);
   const [busy, setBusy] = useState<GameId | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -85,6 +87,11 @@ export function DataPage({ games }: { games: GameSummary[] }) {
               ? 'Official Florida Lottery history, stored locally. Nothing leaves your machine.'
               : 'Drawing-history storage could not be reached.'}
         </p>
+        {dataThrough && (
+          <div className="row-tight" style={{ marginTop: 10 }}>
+            <Chip tone="accent">Latest loaded draw {dateLabel(dataThrough)}</Chip>
+          </div>
+        )}
       </header>
 
       {health.isError && <ErrorBox error={health.error} />}
@@ -118,7 +125,7 @@ export function DataPage({ games }: { games: GameSummary[] }) {
           <table>
             <thead>
               <tr>
-                <th>Game</th><th className="t-right">Draws</th><th>Range</th>
+                <th>Game</th><th className="t-right">Draws</th><th>Data freshness</th>
                 <th>Drawings</th><th className="t-right">Gaps</th><th />
               </tr>
             </thead>
@@ -130,7 +137,7 @@ export function DataPage({ games }: { games: GameSummary[] }) {
                 const gaps = q?.data?.gaps ?? [];
                 const missing = gaps.reduce((s, x) => s + x.missing.length, 0);
                 const first = summary.map((s) => s.first).sort()[0];
-                const last = summary.map((s) => s.last).sort().slice(-1)[0];
+                const last = latestDataDate(summary);
 
                 return (
                   <tr key={g.id}>
@@ -143,7 +150,12 @@ export function DataPage({ games }: { games: GameSummary[] }) {
                     </td>
                     <td className="t-right num">{total > 0 ? total.toLocaleString() : '—'}</td>
                     <td style={{ color: 'var(--muted)', fontSize: 12.5 }}>
-                      {first && last ? `${dateLabel(first)} → ${dateLabel(last)}` : 'Not loaded'}
+                      {first && last ? (
+                        <>
+                          <div style={{ color: 'var(--text-dim)' }}>Data current through {dateLabel(last)}</div>
+                          <div className="inline-note">History starts {dateLabel(first)}</div>
+                        </>
+                      ) : 'Not loaded'}
                     </td>
                     <td>
                       <div className="row-tight">
@@ -210,6 +222,9 @@ export function DataPage({ games }: { games: GameSummary[] }) {
           <Card title="Last ingest" sub={report.source}>
             <div className="row-tight">
               <Chip tone="pos">{report.added.toLocaleString()} added</Chip>
+              {report.corrected > 0 && (
+                <Chip tone="warn">{report.corrected.toLocaleString()} corrected</Chip>
+              )}
               <Chip>{report.duplicates.toLocaleString()} already present</Chip>
               {report.rejected > 0
                 ? <Chip tone="warn">{report.rejected.toLocaleString()} rejected</Chip>
@@ -234,7 +249,7 @@ export function DataPage({ games }: { games: GameSummary[] }) {
               </div>
             )}
 
-            {report.added === 0 && report.duplicates > 0 && report.rejected === 0 && (
+            {report.added === 0 && report.corrected === 0 && report.duplicates > 0 && report.rejected === 0 && (
               <p className="inline-note" style={{ marginTop: 10 }}>
                 Everything in this file was already stored. Re-syncing is always safe — draws are
                 keyed by game, date and drawing, so nothing is ever duplicated.
@@ -249,7 +264,7 @@ export function DataPage({ games }: { games: GameSummary[] }) {
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: 'var(--muted)', display: 'grid', gap: 7 }}>
             <li>Downloads the Lottery's published history PDF for the game and parses every record.</li>
             <li>Each draw is validated against the game matrix <em>in effect on that draw date</em> — matrices have changed over the years, and old draws are checked against the old rules.</li>
-            <li>Draws are keyed on game + date + drawing, so re-syncing never duplicates anything.</li>
+            <li>Draws are keyed on game + date + drawing, so re-syncing never duplicates anything; later official corrections replace the older result.</li>
             <li>If the source layout ever changes, ingest fails loudly rather than importing bad data quietly.</li>
           </ul>
         </Card>

@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
-import type { GameId } from '@numberiq/shared';
-import { api, money, pct, slotLabel, type GameSummary } from '../../lib/api.js';
+import { primaryDrawSlot, type GameId } from '@numberiq/shared';
+import { api, dateLabel, money, pct, slotLabel, type GameSummary } from '../../lib/api.js';
+import { latestDataDate } from '../../lib/gameData.js';
 import { Button, Card, Chip, Field, Input, Notice, Select, ErrorBox, Fold, Meter } from '../../components/ui.js';
 import { Term, Reading } from '../../components/Term.js';
 
@@ -18,14 +19,15 @@ const SERIES_COLORS = [
 
 export function BacktestPage({ games, gameId, setGameId }: Props) {
   const game = games.find((g) => g.id === gameId)!;
-  const [slot, setSlot] = useState(game.slots[game.slots.length - 1]!);
+  const [slot, setSlot] = useState(primaryDrawSlot(game));
   const [selected, setSelected] = useState<string[]>(['balanced', 'hot', 'overdue']);
   const [maxDraws, setMaxDraws] = useState(500);
   const [progress, setProgress] = useState<{ completed: number; total: number; label: string } | null>(null);
   const [resultKey, setResultKey] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const currentSlot = game.slots.includes(slot) ? slot : game.slots[game.slots.length - 1]!;
+  const currentSlot = game.slots.includes(slot) ? slot : primaryDrawSlot(game);
+  const dataThrough = latestDataDate(game.data, currentSlot);
   const strategies = useQuery({ queryKey: ['strategies', gameId], queryFn: () => api.strategies(gameId) });
   const configKey = JSON.stringify([gameId, currentSlot, [...selected].sort(), maxDraws]);
 
@@ -70,7 +72,7 @@ export function BacktestPage({ games, gameId, setGameId }: Props) {
               onChange={(e) => {
                 const next = e.target.value as GameId;
                 setGameId(next);
-                setSlot(games.find((x) => x.id === next)!.slots.slice(-1)[0]!);
+                setSlot(primaryDrawSlot(games.find((x) => x.id === next)!));
                 setSelected(['balanced', 'hot', 'overdue']);
               }}
               style={{ minWidth: 170 }}
@@ -85,6 +87,7 @@ export function BacktestPage({ games, gameId, setGameId }: Props) {
               </Select>
             </Field>
           )}
+          {dataThrough && <Chip>Data current through {dateLabel(dataThrough)}</Chip>}
           <Field label="Drawings to test" hint="Most recent N">
             <Input
               type="number" min={50} max={5000} step={50} value={maxDraws}

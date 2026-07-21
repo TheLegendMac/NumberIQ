@@ -32,8 +32,9 @@ export interface TrackerSummary {
 }
 
 /**
- * Check every saved ticket whose target draw now exists in the database.
- * Idempotent — re-running produces the same results, never double-counts.
+ * Check every saved ticket whose target draw now exists in the database, and
+ * re-check results made stale by an official correction. Idempotent re-runs do
+ * not rewrite current results or double-count them.
  */
 export function checkPendingTickets(db: Database.Database): { checked: number; won: number } {
   const tickets = new TicketRepository(db);
@@ -41,7 +42,7 @@ export function checkPendingTickets(db: Database.Database): { checked: number; w
   let checked = 0;
   let won = 0;
 
-  for (const t of tickets.unchecked()) {
+  for (const t of tickets.needingResultCheck()) {
     if (!t.targetDrawDate) continue;
     const draw = draws.findByDate(t.gameId, t.drawSlot, t.targetDrawDate);
     if (!draw) continue; // draw hasn't happened or hasn't been ingested yet

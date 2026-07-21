@@ -4,7 +4,7 @@ import {
   GAME_LIST, getGame, isGameId, strategiesForGame, STRATEGIES,
   expectedValuePerTicket, evLowerBound, currentEraStart,
   generateRequestSchema, backtestRequestSchema, saveTicketSchema, settingsSchema,
-  type GameId, type StrategyId,
+  primaryDrawSlot, type GameId, type StrategyId,
 } from '@numberiq/shared';
 import { getDb } from '../db/index.js';
 import { DrawRepository, TicketRepository, SettingsRepository, IngestRunRepository } from '../db/repositories.js';
@@ -35,7 +35,7 @@ function requireGame(req: Request): GameId {
 function resolveSlot(gameId: GameId, requested: unknown): string {
   const game = getGame(gameId);
   const s = typeof requested === 'string' ? requested : '';
-  return game.slots.includes(s) ? s : game.slots[game.slots.length - 1]!;
+  return game.slots.includes(s) ? s : primaryDrawSlot(game);
 }
 
 // --- Games & odds ----------------------------------------------------------

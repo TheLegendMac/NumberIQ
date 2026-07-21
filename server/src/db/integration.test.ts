@@ -29,8 +29,35 @@ describe('draw persistence', () => {
     expect(ingestDraws(db, 'fantasy5', batch, 't').added).toBe(2);
     const second = ingestDraws(db, 'fantasy5', batch, 't');
     expect(second.added).toBe(0);
+    expect(second.corrected).toBe(0);
     expect(second.duplicates).toBe(2);
     expect(new DrawRepository(db).list('fantasy5', 'evening')).toHaveLength(2);
+  });
+
+  it('counts and applies changed fields while leaving exact duplicates untouched', () => {
+    const repo = new DrawRepository(db);
+    const original: RawDraw = {
+      gameId: 'powerball', drawDate: '2026-07-20', drawSlot: 'main',
+      numbers: [2, 9, 44, 53, 59], extras: { powerball: 8 }, source: 'official:v1',
+    };
+
+    expect(repo.insertMany([original])).toEqual({ added: 1, corrected: 0, duplicates: 0 });
+    db.prepare(`UPDATE draws SET ingested_at = '2000-01-01 00:00:00'`).run();
+    expect(repo.insertMany([original])).toEqual({ added: 0, corrected: 0, duplicates: 1 });
+    expect((db.prepare(`SELECT ingested_at FROM draws`).get() as { ingested_at: string }).ingested_at)
+      .toBe('2000-01-01 00:00:00');
+
+    expect(repo.insertMany([{ ...original, numbers: [1, 9, 44, 53, 59] }]))
+      .toEqual({ added: 0, corrected: 1, duplicates: 0 });
+    expect(repo.insertMany([{ ...original, numbers: [1, 9, 44, 53, 59], extras: { powerball: 7 } }]))
+      .toEqual({ added: 0, corrected: 1, duplicates: 0 });
+    expect(repo.insertMany([{ ...original, numbers: [1, 9, 44, 53, 59], extras: { powerball: 7 }, source: 'official:v2' }]))
+      .toEqual({ added: 0, corrected: 1, duplicates: 0 });
+
+    const stored = repo.findByDate('powerball', 'main', '2026-07-20')!;
+    expect(stored.numbers).toEqual([1, 9, 44, 53, 59]);
+    expect(stored.extras).toEqual({ powerball: 7 });
+    expect(stored.source).toBe('official:v2');
   });
 
   it('treats the same date in different slots as distinct draws', () => {
@@ -102,6 +129,7 @@ describe('spreadsheet import', () => {
     const csv = 'Draw Date,Numbers,Powerball\n2024-03-01,"9 14 44 50 56",3\n';
     const parsed = parseSpreadsheet(Buffer.from(csv), 'powerball', 'pb.csv');
     expect(parsed.draws[0]!.extras.powerball).toBe(3);
+    expect(parsed.draws[0]!.drawSlot).toBe('main');
   });
 
   it('maps draw-type text onto slots', () => {
@@ -149,6 +177,31 @@ describe('ticket tracking', () => {
     checkPendingTickets(db);
     checkPendingTickets(db);
     expect(summarize(db).winnings).toBe(106);
+  });
+
+  it('re-checks a saved ticket after its official draw is corrected', () => {
+    seedTicketAndDraw([1, 2, 3, 4, 20], [1, 2, 3, 4, 5]);
+    expect(checkPendingTickets(db).checked).toBe(1);
+    expect(summarize(db).winnings).toBe(106);
+
+    // Make the ordering deterministic instead of relying on wall-clock delays.
+    db.prepare(`UPDATE ticket_results SET checked_at = '2000-01-01 00:00:00'`).run();
+    const correction = ingestDraws(
+      db,
+      'fantasy5',
+      [f5('2026-02-01', [10, 11, 12, 13, 14])],
+      'official:corrected',
+    );
+    expect(correction).toMatchObject({ added: 0, corrected: 1, duplicates: 0 });
+
+    expect(checkPendingTickets(db).checked).toBe(1);
+    expect(summarize(db).winnings).toBe(0);
+    expect(new TicketRepository(db).results()[0]).toMatchObject({ matches: 0, payout: 0 });
+
+    // An unchanged ingest does not stale the newly recalculated result.
+    expect(ingestDraws(db, 'fantasy5', [f5('2026-02-01', [10, 11, 12, 13, 14])], 't'))
+      .toMatchObject({ corrected: 0, duplicates: 1 });
+    expect(checkPendingTickets(db).checked).toBe(0);
   });
 
   it('leaves a ticket pending when its draw has not been ingested', () => {

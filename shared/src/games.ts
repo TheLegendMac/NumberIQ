@@ -254,6 +254,19 @@ export function getGame(id: GameId): GameDefinition {
   return g;
 }
 
+/**
+ * The drawing a user means when they select a game without naming a slot.
+ *
+ * Slot order is part of the game definition: the official/primary drawing is
+ * declared first, followed by alternatives such as Double Play. Keeping this
+ * rule here stops individual screens from silently choosing the last slot.
+ */
+export function primaryDrawSlot(game: Pick<GameDefinition, 'name' | 'slots'>): string {
+  const slot = game.slots[0];
+  if (!slot) throw new Error(`${game.name} has no drawing slots`);
+  return slot;
+}
+
 export function isGameId(v: unknown): v is GameId {
   return typeof v === 'string' && v in GAMES;
 }

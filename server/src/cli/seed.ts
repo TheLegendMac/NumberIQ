@@ -20,6 +20,7 @@ for (const game of games) {
     const missing = gaps.reduce((s, g) => s + g.missing.length, 0);
     console.log(
       `${game.name.padEnd(21)} +${String(report.added).padStart(6)} added  ` +
+      `${String(report.corrected).padStart(6)} corrected  ` +
       `${String(report.duplicates).padStart(6)} dup  ${String(report.rejected).padStart(4)} rejected  ` +
       `${String(missing).padStart(5)} gaps  ${((Date.now() - started) / 1000).toFixed(1)}s`,
     );

@@ -16,6 +16,7 @@ export interface IngestReport {
   source: string;
   parsed: number;
   added: number;
+  corrected: number;
   duplicates: number;
   rejected: number;
   /** Human-readable reasons, capped for display. */
@@ -61,7 +62,7 @@ export function ingestDraws(
 ): IngestReport {
   const { valid, rejected, issues } = validateBatch(gameId, draws);
   const repo = new DrawRepository(db);
-  const { added, duplicates } = repo.insertMany(valid);
+  const { added, corrected, duplicates } = repo.insertMany(valid);
 
   const slots: Record<string, number> = {};
   for (const d of valid) slots[d.drawSlot] = (slots[d.drawSlot] ?? 0) + 1;
@@ -73,6 +74,7 @@ export function ingestDraws(
     source,
     parsed: draws.length,
     added,
+    corrected,
     duplicates,
     rejected: rejected.length,
     issues: issues.slice(0, 25),

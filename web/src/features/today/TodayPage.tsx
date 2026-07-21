@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { nextDrawing, formatCountdown, floridaDate } from '@numberiq/shared';
 import type { Draw, GameId } from '@numberiq/shared';
 import { api, money, pct, dateLabel, slotLabel, type GameSummary } from '../../lib/api.js';
+import { latestDataDate, latestResultSlot } from '../../lib/gameData.js';
 
 /** A saved ticket as `/tickets` returns it — with its result already attached. */
 type HeldTicket = Awaited<ReturnType<typeof api.tickets>>[number];
@@ -32,13 +33,6 @@ function usePreviousVisit(): string | null {
     catch { /* storage can be unavailable */ }
   }, []);
   return previous.current;
-}
-
-/** The slot of a game that drew most recently, by the summary already in hand. */
-function latestSlot(game: GameSummary): string | null {
-  const withData = game.data.filter((d) => d.count > 0);
-  if (withData.length === 0) return null;
-  return [...withData].sort((a, b) => b.last.localeCompare(a.last))[0]!.slot;
 }
 
 export function TodayPage({ games, go }: Props) {
@@ -92,6 +86,7 @@ export function TodayPage({ games, go }: Props) {
 
   const newCount = resolved.filter((r) => r.isNew).length;
   const pending = held.filter((x) => !x.result);
+  const dataThrough = latestDataDate(games.flatMap((g) => g.data));
 
   // Next drawings, soonest first, with the games you hold tickets for called out.
   const upcoming = games
@@ -126,7 +121,12 @@ export function TodayPage({ games, go }: Props) {
             ? undefined
             : 'The most recent drawing for every game you hold a ticket on.'
         }
-        actions={newCount > 0 ? <Chip tone="accent">{newCount} new</Chip> : undefined}
+        actions={(dataThrough || newCount > 0) ? (
+          <div className="row-tight" style={{ justifyContent: 'flex-end' }}>
+            {dataThrough && <Chip>Latest loaded draw {dateLabel(dataThrough)}</Chip>}
+            {newCount > 0 && <Chip tone="accent">{newCount} new</Chip>}
+          </div>
+        ) : undefined}
       >
         {tickets.isLoading || results.isLoading ? (
           <Skeleton rows={3} />
@@ -325,7 +325,7 @@ function TicketOutcome({ tickets }: { tickets: HeldTicket[] }) {
  */
 function AllGameResults({ games }: { games: GameSummary[] }) {
   const targets = games
-    .map((g) => ({ game: g, slot: latestSlot(g) }))
+    .map((g) => ({ game: g, slot: latestResultSlot(g) }))
     .filter((x): x is { game: GameSummary; slot: string } => x.slot !== null);
 
   const all = useQuery({

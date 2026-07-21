@@ -7,7 +7,7 @@
  * no path into the database that skips validation.
  */
 import * as XLSX from 'xlsx';
-import { getGame, type GameId, type RawDraw } from '@numberiq/shared';
+import { getGame, primaryDrawSlot, type GameId, type RawDraw } from '@numberiq/shared';
 import { parseLotteryDate } from './pdf-layout.js';
 
 export interface SheetParseResult {
@@ -130,7 +130,7 @@ export function parseSpreadsheet(buffer: Buffer, gameId: GameId, filename: strin
   }
 
   const draws: RawDraw[] = [];
-  const defaultSlot = game.slots.length === 1 ? game.slots[0]! : game.slots[game.slots.length - 1]!;
+  const defaultSlot = primaryDrawSlot(game);
 
   rows.forEach((row, i) => {
     const drawDate = coerceDate(dateCol ? row[dateCol] : null);

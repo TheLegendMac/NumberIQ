@@ -85,8 +85,21 @@ hosted. To refresh the hosted data:
 ```bash
 npx tsx server/src/cli/seed.ts   # download + parse locally
 npm run d1:export                # -> data/d1-seed.sql
-npm run d1:push                  # INSERT OR IGNORE, so it is idempotent
+npm run d1:push                  # guarded upsert: new draws + official corrections
+npm run d1:verify                # live game/slot dates must match local ingest
 ```
+
+The **Refresh drawing data** GitHub Actions workflow automates that flow. It
+runs daily at 15:15 UTC (10:15 a.m. EST / 11:15 a.m. EDT), after Florida's
+history PDFs normally update, and retries at 19:15 UTC in case publication is
+late. It can also be run on demand with **Run workflow**; the `full` option
+publishes the complete local history instead of the normal 45-day window.
+
+A successful D1 command is not treated as proof that the data is current. The
+workflow compares the latest local and hosted draw date for every game and draw
+slot and fails if any watermark is stale, missing, or unexpected. Run
+`npm run d1:verify` locally for the same check; set `NUMBERIQ_LIVE_URL` to check
+a different deployment.
 
 ### Cost
 

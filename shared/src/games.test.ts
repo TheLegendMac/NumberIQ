@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { GAMES, GAME_LIST, expectedValuePerTicket, strategiesForGame, hasSharedPrizes } from './games.js';
+import {
+  GAMES, GAME_LIST, expectedValuePerTicket, strategiesForGame, hasSharedPrizes, primaryDrawSlot,
+} from './games.js';
 import { choose, totalCombinations, waysToMatch } from './math.js';
 import { saveTicketSchema } from './schemas.js';
 
@@ -77,6 +79,12 @@ describe('game matrices reproduce published odds', () => {
 });
 
 describe('honesty invariants', () => {
+  it('uses the first declared drawing as the default', () => {
+    expect(primaryDrawSlot(GAMES.powerball)).toBe('main');
+    expect(primaryDrawSlot(GAMES.lotto)).toBe('main');
+    expect(primaryDrawSlot(GAMES.fantasy5)).toBe('midday');
+  });
+
   it('fixed-payout games never offer shared-prize strategies', () => {
     for (const g of GAME_LIST) {
       if (g.payoutModel !== 'fixed') continue;

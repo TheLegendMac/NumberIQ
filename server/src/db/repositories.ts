@@ -28,32 +28,51 @@ export class DrawRepository {
   constructor(private db: Database.Database) {}
 
   /**
-   * Insert draws idempotently. The UNIQUE(game_id, draw_date, draw_slot)
-   * constraint makes re-ingesting the same source a no-op, so syncing twice
-   * can never duplicate or corrupt history.
+   * Insert new draws and apply late corrections idempotently. An existing draw
+   * is updated only when its numbers, extras or source changed; otherwise it is
+   * counted as an unchanged duplicate and no row is rewritten.
    */
-  insertMany(draws: RawDraw[]): { added: number; duplicates: number } {
-    const stmt = this.db.prepare(
+  insertMany(draws: RawDraw[]): { added: number; corrected: number; duplicates: number } {
+    const insert = this.db.prepare(
       `INSERT INTO draws (game_id, draw_date, draw_slot, numbers, extras, source)
        VALUES (@game_id, @draw_date, @draw_slot, @numbers, @extras, @source)
        ON CONFLICT (game_id, draw_date, draw_slot) DO NOTHING`,
     );
+    const correct = this.db.prepare(
+      `UPDATE draws
+       SET numbers = @numbers,
+           extras = @extras,
+           source = @source,
+           ingested_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
+       WHERE game_id = @game_id
+         AND draw_date = @draw_date
+         AND draw_slot = @draw_slot
+         AND (numbers IS NOT @numbers OR extras IS NOT @extras OR source IS NOT @source)`,
+    );
     let added = 0;
+    let corrected = 0;
+    let duplicates = 0;
     const run = this.db.transaction((rows: RawDraw[]) => {
       for (const d of rows) {
-        const info = stmt.run({
+        const values = {
           game_id: d.gameId,
           draw_date: d.drawDate,
           draw_slot: d.drawSlot,
           numbers: JSON.stringify(d.numbers),
           extras: JSON.stringify(d.extras ?? {}),
           source: d.source,
-        });
-        added += info.changes;
+        };
+        if (insert.run(values).changes > 0) {
+          added++;
+        } else if (correct.run(values).changes > 0) {
+          corrected++;
+        } else {
+          duplicates++;
+        }
       }
     });
     run(draws);
-    return { added, duplicates: draws.length - added };
+    return { added, corrected, duplicates };
   }
 
   /** Draws for a game/slot, most recent first. */
@@ -187,14 +206,22 @@ export class TicketRepository {
     return this.db.prepare(`DELETE FROM tickets WHERE id = ?`).run(id).changes > 0;
   }
 
-  /** Tickets whose target draw has happened but that have no recorded result yet. */
-  unchecked(): Ticket[] {
+  /** Tickets without a result, plus results made stale by a corrected draw. */
+  needingResultCheck(): Ticket[] {
     return (
       this.db
         .prepare(
-          `SELECT t.* FROM tickets t
+          `SELECT t.*
+           FROM tickets t
+           LEFT JOIN draws d
+             ON d.game_id = t.game_id
+            AND d.draw_slot = t.draw_slot
+            AND d.draw_date = t.target_draw_date
+           LEFT JOIN ticket_results r
+             ON r.ticket_id = t.id
+            AND r.draw_id = d.id
            WHERE t.target_draw_date IS NOT NULL
-             AND NOT EXISTS (SELECT 1 FROM ticket_results r WHERE r.ticket_id = t.id)`,
+             AND (r.ticket_id IS NULL OR r.checked_at < d.ingested_at)`,
         )
         .all() as TicketRow[]
     ).map(toTicket);
@@ -207,7 +234,8 @@ export class TicketRepository {
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT (ticket_id, draw_id) DO UPDATE SET
            matches = excluded.matches, extra_match = excluded.extra_match,
-           tier = excluded.tier, payout = excluded.payout, checked_at = datetime('now')`,
+           tier = excluded.tier, payout = excluded.payout,
+           checked_at = strftime('%Y-%m-%d %H:%M:%f', 'now')`,
       )
       .run(r.ticketId, r.drawId, r.matches, r.extraMatch ? 1 : 0, r.tier, r.payout);
   }

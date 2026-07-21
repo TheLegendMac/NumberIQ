@@ -1,3 +1,4 @@
+import { primaryDrawSlot } from '@numberiq/shared';
 import type { GameDefinition, GameId, GeneratedTicket, StrategyDefinition, Ticket, Draw, StrategyId } from '@numberiq/shared';
 import type { BacktestProgress } from './backtest.worker.js';
 
@@ -121,29 +122,41 @@ export interface DataResponse {
 
 export interface IngestReport {
   gameId: string; source: string; parsed: number; added: number;
-  duplicates: number; rejected: number; issues: string[]; slots: Record<string, number>;
+  corrected: number; duplicates: number; rejected: number; issues: string[]; slots: Record<string, number>;
 }
 
 /**
  * Drawing history cache.
  *
  * Analysis runs in the browser, not on the server — see worker/src/index.ts for
- * why. Each game/slot's drawings are fetched once and reused for statistics, the
- * randomness audit, generation and backtesting, so a backtest re-run costs one
- * `useMemo`, not a network round trip.
+ * why. Each game/slot's drawings are reused for statistics, the randomness
+ * audit, generation and backtesting for five minutes. That avoids redundant
+ * full-history requests without leaving a long-open tab on yesterday's data.
  */
-const drawCache = new Map<string, Promise<Draw[]>>();
+const DRAW_CACHE_TTL_MS = 5 * 60_000;
+
+interface DrawCacheEntry {
+  promise: Promise<Draw[]>;
+  expiresAt: number;
+}
+
+const drawCache = new Map<string, DrawCacheEntry>();
 
 export function fetchDraws(gameId: GameId, slot: string): Promise<Draw[]> {
   const key = `${gameId}:${slot}`;
   let entry = drawCache.get(key);
-  if (!entry) {
-    entry = request<{ slot: string; draws: Draw[] }>(`/draws/${gameId}?slot=${slot}&limit=20000`)
+  if (!entry || entry.expiresAt <= Date.now()) {
+    const promise = request<{ slot: string; draws: Draw[] }>(`/draws/${gameId}?slot=${slot}&limit=20000`)
       .then((r) => r.draws)
-      .catch((err) => { drawCache.delete(key); throw err; });
+      .catch((err) => {
+        // Do not let an older, expired request evict a newer replacement.
+        if (drawCache.get(key)?.promise === promise) drawCache.delete(key);
+        throw err;
+      });
+    entry = { promise, expiresAt: Date.now() + DRAW_CACHE_TTL_MS };
     drawCache.set(key, entry);
   }
-  return entry;
+  return entry.promise;
 }
 
 /** Called after an ingest so the next analysis reflects new drawings. */
@@ -206,7 +219,7 @@ export const api = {
     const { generateTickets, getGame } = await import('@numberiq/shared');
     const gameId = body.gameId as GameId;
     const game = getGame(gameId);
-    const slot = (body.slot as string) ?? game.slots[game.slots.length - 1]!;
+    const slot = (body.slot as string) ?? primaryDrawSlot(game);
 
     // The budget ceiling is a hard gate and must be enforced against server state,
     // not client state, so it cannot be bypassed by editing local values.
@@ -260,7 +273,7 @@ export const api = {
     const { getGame } = await import('@numberiq/shared');
     const gameId = body.gameId as GameId;
     const game = getGame(gameId);
-    const slot = (body.slot as string) ?? game.slots[game.slots.length - 1]!;
+    const slot = (body.slot as string) ?? primaryDrawSlot(game);
     const draws = [...(await fetchDraws(gameId, slot))].sort((a, b) => a.drawDate.localeCompare(b.drawDate));
 
     // Cancellation may happen while drawing history is still loading. Abort

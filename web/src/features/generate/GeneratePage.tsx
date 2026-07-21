@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GameId, StrategyDefinition } from '@numberiq/shared';
-import { nextDrawingForSlot, formatCountdown, describeSchedule } from '@numberiq/shared';
-import { api, money, oneIn, slotLabel, type GameSummary, type GenerateResponse } from '../../lib/api.js';
+import { nextDrawingForSlot, formatCountdown, describeSchedule, primaryDrawSlot } from '@numberiq/shared';
+import { api, dateLabel, money, oneIn, slotLabel, type GameSummary, type GenerateResponse } from '../../lib/api.js';
+import { latestDataDate } from '../../lib/gameData.js';
 import { Button, Card, Chip, Field, Input, Notice, Select, Ball, Meter, ErrorBox, Fold } from '../../components/ui.js';
 import { Term } from '../../components/Term.js';
 
@@ -16,7 +17,7 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
   const game = games.find((g) => g.id === gameId)!;
   const qc = useQueryClient();
 
-  const [slot, setSlot] = useState(game.slots[game.slots.length - 1]!);
+  const [slot, setSlot] = useState(primaryDrawSlot(game));
   const [strategy, setStrategy] = useState('balanced');
   const [count, setCount] = useState(5);
   const [showControls, setShowControls] = useState(false);
@@ -38,7 +39,8 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
   const odds = useQuery({ queryKey: ['odds', gameId], queryFn: () => api.odds(gameId) });
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
 
-  const currentSlot = game.slots.includes(slot) ? slot : game.slots[game.slots.length - 1]!;
+  const currentSlot = game.slots.includes(slot) ? slot : primaryDrawSlot(game);
+  const dataThrough = latestDataDate(game.data, currentSlot);
   const activeStrategy: StrategyDefinition | undefined =
     strategies.data?.find((s) => s.id === strategy) ?? strategies.data?.[0];
   const generationKey = JSON.stringify([
@@ -120,6 +122,11 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
           <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>
             {activeStrategy?.name ?? 'Balanced'} · {money(game.basePrice)} per ticket
           </p>
+          {dataThrough && (
+            <div className="row-tight" style={{ marginTop: 7 }}>
+              <Chip>Data current through {dateLabel(dataThrough)}</Chip>
+            </div>
+          )}
           {upcoming && (
             <div className="next-draw" title={describeSchedule(gameId)}>
               <span className="next-draw-dot" aria-hidden="true" />
@@ -143,7 +150,7 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
                 onChange={(e) => {
                   const next = e.target.value as GameId;
                   setGameId(next);
-                  setSlot(games.find((x) => x.id === next)!.slots.slice(-1)[0]!);
+                  setSlot(primaryDrawSlot(games.find((x) => x.id === next)!));
                 }}
               >
                 {games.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
