@@ -11,6 +11,12 @@
  *
  * Statements are chunked into multi-row INSERTs to stay well inside D1's
  * per-batch statement limits and to keep the upload a reasonable size.
+ *
+ * `--since=<days>` exports only recent drawings. The scheduled refresh uses this:
+ * re-pushing all ~87k rows every night would burn D1's daily write allowance for
+ * no benefit, since INSERT OR IGNORE makes older rows a no-op anyway. The window
+ * is deliberately wider than a day so a missed run — or a late correction by the
+ * Lottery — still gets picked up.
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -19,15 +25,30 @@ import { DATA_DIR } from '../ingest/fetch.js';
 
 const ROWS_PER_INSERT = 200;
 
+const sinceArg = process.argv.find((a) => a.startsWith('--since='));
+const sinceDays = sinceArg ? Number(sinceArg.split('=')[1]) : null;
+const sinceDate = sinceDays
+  ? new Date(Date.now() - sinceDays * 86_400_000).toISOString().slice(0, 10)
+  : null;
+
 const db = getDb();
 const rows = db
-  .prepare(`SELECT game_id, draw_date, draw_slot, numbers, extras, source FROM draws ORDER BY game_id, draw_slot, draw_date`)
-  .all() as Array<{
+  .prepare(
+    `SELECT game_id, draw_date, draw_slot, numbers, extras, source FROM draws
+     ${sinceDate ? 'WHERE draw_date >= @since' : ''}
+     ORDER BY game_id, draw_slot, draw_date`,
+  )
+  .all(sinceDate ? { since: sinceDate } : {}) as Array<{
     game_id: string; draw_date: string; draw_slot: string;
     numbers: string; extras: string; source: string;
   }>;
 
 if (rows.length === 0) {
+  if (sinceDate) {
+    // Nothing new is a normal outcome for a scheduled run, not a failure.
+    console.log(`No drawings on or after ${sinceDate}. Nothing to publish.`);
+    process.exit(0);
+  }
   console.error('No drawings in the local database. Run: npx tsx server/src/cli/seed.ts');
   process.exit(1);
 }
@@ -55,7 +76,7 @@ writeFileSync(path, out.join('\n') + '\n');
 
 const bytes = Buffer.byteLength(out.join('\n'));
 console.log(
-  `Exported ${rows.length.toLocaleString()} drawings → ${path}\n` +
+  `Exported ${rows.length.toLocaleString()} drawings${sinceDate ? ` since ${sinceDate}` : ''} → ${path}\n` +
   `${(bytes / 1_048_576).toFixed(1)} MB across ${Math.ceil(rows.length / ROWS_PER_INSERT)} INSERT statements.\n\n` +
   `Next: npm run d1:push`,
 );

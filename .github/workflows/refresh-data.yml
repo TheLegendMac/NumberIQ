@@ -1,0 +1,105 @@
+name: Refresh drawing data
+
+# Ingest cannot run on the Worker: parsing ~87k drawings out of the Lottery's
+# PDFs is far beyond a Worker's CPU budget, and an open sync endpoint would let
+# anyone point the deployment at the Lottery's servers. So the ingest runs here
+# instead, on a schedule, and publishes only the result to D1.
+on:
+  schedule:
+    # 07:00 UTC = 2am EST / 3am EDT. Every Florida drawing is finished by
+    # 11:45pm ET, so this always runs after the day's final result is posted.
+    # Cron has no DST awareness; this hour is safe under both offsets.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Publish the entire history instead of just recent drawings'
+        type: boolean
+        default: false
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Downloads each game's official history PDF once and parses it. Failures
+      # are reported per game rather than aborting, so one bad source file does
+      # not block the others.
+      - name: Ingest official history
+        run: npx tsx server/src/cli/seed.ts | tee ingest.log
+
+      - name: Fail if every game failed
+        run: |
+          if grep -q "FAILED" ingest.log && ! grep -q "added" ingest.log; then
+            echo "::error::Every game failed to ingest — the source format may have changed."
+            exit 1
+          fi
+          if grep -q "FAILED" ingest.log; then
+            echo "::warning::Some games failed to ingest; see the log above."
+          fi
+
+      # Only recent drawings are published. INSERT OR IGNORE makes older rows a
+      # no-op, so re-sending them would spend D1 writes for nothing.
+      - name: Export drawings for D1
+        run: |
+          if [ "${{ inputs.full }}" = "true" ]; then
+            npx tsx server/src/cli/export-d1.ts
+          else
+            npx tsx server/src/cli/export-d1.ts --since=45
+          fi
+
+      - name: Publish to D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ ! -s data/d1-seed.sql ]; then
+            echo "Nothing new to publish."
+            exit 0
+          fi
+          npx wrangler d1 execute numberiq --remote --file=./data/d1-seed.sql --yes
+
+      # Confirm the deployment actually reflects the refresh, rather than
+      # trusting that the push reported success.
+      - name: Verify the live deployment
+        run: |
+          sleep 5
+          HEALTH=$(curl -sS --max-time 30 https://numberiq.trappers-edge.workers.dev/api/health)
+          echo "$HEALTH"
+          echo "$HEALTH" | grep -q '"ok":true' || {
+            echo "::error::Health check failed after publishing."
+            exit 1
+          }
+          node -e '
+            const games = JSON.parse(process.argv[1]);
+            const rows = games
+              .filter((g) => g.data.length && !g.retiredOn)
+              .map((g) => ({ name: g.name, last: g.data.map((d) => d.last).sort().pop() }))
+              .sort((a, b) => a.last.localeCompare(b.last));
+            for (const r of rows) console.log(`  ${r.name.padEnd(22)} ${r.last}`);
+          ' "$(curl -sS --max-time 60 https://numberiq.trappers-edge.workers.dev/api/games)"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Drawing data refresh"
+            echo ""
+            echo '```'
+            cat ingest.log 2>/dev/null || echo "no ingest log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
