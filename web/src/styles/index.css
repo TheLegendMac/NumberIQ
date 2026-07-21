@@ -549,6 +549,27 @@ tbody tr:hover td { background: var(--surface-2); }
 .draw-row-when { text-align: right; display: grid; gap: 2px; flex: 0 0 auto; }
 .draw-row-count { font-size: 13px; font-weight: 620; color: var(--accent-hi); font-variant-numeric: tabular-nums; }
 
+/* ---------- Today: drawing results ---------- */
+
+.result-list { display: grid; gap: 2px; }
+.result-row {
+  display: grid; gap: 9px;
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+}
+.result-row:last-child { border-bottom: none; }
+.result-row-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.result-row-you { font-size: 13px; }
+
+/* The all-games fold is a reference list, not the headline — one line per game. */
+.result-row.compact {
+  grid-template-columns: 1fr auto; align-items: center; gap: 14px; padding: 10px 0;
+}
+.result-row.compact .result-row-head { flex-direction: column; align-items: flex-start; gap: 1px; }
+
+@media (max-width: 760px) {
+  .result-row.compact { grid-template-columns: 1fr; gap: 7px; }
+}
+
 /* ---------- Saved ticket rows ---------- */
 
 .ticket-list { display: grid; gap: 2px; }
@@ -576,3 +597,37 @@ tbody tr:hover td { background: var(--surface-2); }
 
 /* Status labels in dense tables must not wrap mid-phrase. */
 td .inline-note { white-space: nowrap; }
+
+/* ---------- Most-drawn numbers, all games ---------- */
+
+.freq-list { display: grid; gap: 2px; }
+.freq-row { padding: 14px 0; border-bottom: 1px solid var(--border); }
+.freq-row:last-child { border-bottom: none; }
+.freq-row-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.freq-game { font-size: 13.5px; font-weight: 600; }
+.freq-toggle {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 3px 10px; font-size: 11.5px; cursor: pointer;
+  flex: 0 0 auto; min-height: 26px;
+}
+.freq-toggle:hover { color: var(--text); border-color: var(--border-strong); }
+
+.freq-balls { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.freq-ball { display: grid; justify-items: center; gap: 3px; }
+/* The count sits under its ball so identity is never carried by position alone. */
+.freq-count { font-size: 11px; color: var(--muted-2); }
+.freq-expected { align-self: center; margin-left: 4px; line-height: 1.35; }
+
+.freq-all {
+  display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px;
+  padding: 12px; background: var(--surface-2); border-radius: var(--r);
+}
+.freq-all-item { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+
+.freq-verdict { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+
+@media (max-width: 760px) {
+  .freq-expected { width: 100%; margin: 4px 0 0; }
+}

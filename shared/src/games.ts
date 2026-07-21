@@ -298,6 +298,18 @@ export function matrixForDate(g: GameDefinition, isoDate: string): EffectiveMatr
 }
 
 /** Games where number selection can legitimately affect expected value. */
+/**
+ * First draw date governed by the game's *current* matrix.
+ *
+ * Frequency counts must never pool across an era boundary. Fantasy 5 only added
+ * numbers 27-36 in 2001, so counting from 1988 would make them look permanently
+ * "cold" — an artefact of when they started existing, not of how often they fall.
+ */
+export function currentEraStart(g: GameDefinition): string | null {
+  if (!g.matrixEras?.length) return null;
+  return g.matrixEras[g.matrixEras.length - 1]!.from;
+}
+
 export function hasSharedPrizes(g: GameDefinition): boolean {
   return g.payoutModel !== 'fixed';
 }

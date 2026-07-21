@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FrequencyTable } from './FrequencyTable.js';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, ReferenceLine } from 'recharts';
 import type { GameId } from '@numberiq/shared';
@@ -38,6 +39,9 @@ export function AnalyzePage({ games, gameId, setGameId }: Props) {
         <h1>Analyze</h1>
         <p>What the history actually shows — in plain English, with the full numbers underneath.</p>
       </header>
+
+      <FrequencyTable />
+
 
       <Card>
         <div className="row" style={{ alignItems: 'flex-end' }}>

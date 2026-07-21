@@ -149,6 +149,17 @@ export function invalidateDraws(): void {
   drawCache.clear();
 }
 
+/**
+ * The tail of one slot's history, deliberately outside `drawCache`.
+ *
+ * Today needs the last drawing or two for a handful of slots; the analysis cache
+ * holds 20,000 rows per slot. Sharing it would make opening the home screen pull
+ * the full history of every game the user holds a ticket for.
+ */
+export const recentDraws = (gameId: GameId, slot: string, limit = 1): Promise<Draw[]> =>
+  request<{ slot: string; draws: Draw[] }>(`/draws/${gameId}?slot=${slot}&limit=${limit}`)
+    .then((r) => r.draws);
+
 export interface HealthResponse {
   ok: boolean;
   draws: number;
@@ -156,7 +167,19 @@ export interface HealthResponse {
   runtime?: string;
 }
 
+export interface GameFrequency {
+  gameId: string;
+  name: string;
+  kind: 'digits' | 'combination';
+  drawCount: number;
+  from: string;
+  to: string;
+  eraStart: string | null;
+  counts: Array<{ n: number; count: number }>;
+}
+
 export const api = {
+  frequency: () => request<GameFrequency[]>('/frequency'),
   health: () => request<HealthResponse>('/health'),
   games: () => request<GameSummary[]>('/games'),
   odds: (id: GameId) => request<OddsResponse>(`/games/${id}/odds`),
@@ -263,6 +286,8 @@ export const api = {
       });
     });
   },
+
+  recent: recentDraws,
 
   popularity: async (id: GameId, slot: string, numbers: number[]) =>
     estimatePopularity(getGame(id), numbers, { recentDraws: (await fetchDraws(id, slot)).slice(0, 100) }),

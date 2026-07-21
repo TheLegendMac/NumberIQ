@@ -16,6 +16,7 @@ import {
   expectedValuePerTicket, evLowerBound, evaluateTicket,
   saveTicketSchema, settingsSchema,
   type Draw, type GameId, type Ticket,
+  currentEraStart,
 } from '@numberiq/shared';
 
 export interface Env {
@@ -205,6 +206,50 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
           ? `${g.name} pays fixed, posted amounts. Every combination has identical odds and an identical prize, so no selection method can change expected value.`
           : `${g.name} splits prizes among winners in a tier. Selection cannot change your odds of winning, but avoiding widely-picked combinations increases what you would collect if you win.`,
     });
+  }
+
+  /**
+   * Per-game draw counts for every number, aggregated in D1 via json_each so the
+   * browser never has to pull ~84k drawings to count them. Restricted to each
+   * game's current matrix era — see currentEraStart.
+   */
+  if (path === '/frequency' && method === 'GET') {
+    const out: unknown[] = [];
+
+    for (const game of GAME_LIST) {
+      const since = currentEraStart(game);
+      const rows = await env.DB.prepare(
+        `SELECT json_each.value AS n, COUNT(*) AS c
+           FROM draws, json_each(draws.numbers)
+          WHERE draws.game_id = ?1 ${since ? 'AND draws.draw_date >= ?2' : ''}
+          GROUP BY n ORDER BY n`,
+      )
+        .bind(...(since ? [game.id, since] : [game.id]))
+        .all<{ n: number; c: number }>();
+
+      const meta = await env.DB.prepare(
+        `SELECT COUNT(*) AS draws, MIN(draw_date) AS first, MAX(draw_date) AS last
+           FROM draws WHERE game_id = ?1 ${since ? 'AND draw_date >= ?2' : ''}`,
+      )
+        .bind(...(since ? [game.id, since] : [game.id]))
+        .first<{ draws: number; first: string; last: string }>();
+
+      const counts = rows.results ?? [];
+      if (!counts.length || !meta) continue;
+
+      out.push({
+        gameId: game.id,
+        name: game.name,
+        kind: game.kind,
+        drawCount: meta.draws,
+        from: meta.first,
+        to: meta.last,
+        eraStart: since,
+        counts: counts.map((r) => ({ n: Number(r.n), count: Number(r.c) })),
+      });
+    }
+
+    return json(out);
   }
 
   if (path === '/strategies' && method === 'GET') {
