@@ -11,6 +11,7 @@
  * that rather than presenting them as permanently authoritative.
  */
 import type { GameId } from './types.js';
+import { GAMES } from './games.js';
 
 export const SCHEDULE_VERIFIED = '2026-07-21';
 export const LOTTERY_TIMEZONE = 'America/New_York';
@@ -140,6 +141,8 @@ function formatTime(hour: number, minute: number): string {
 
 /** The next drawing for one slot, searching forward up to two weeks. */
 export function nextDrawingForSlot(gameId: GameId, slot: string, now = new Date()): NextDrawing | null {
+  // A retired game will never draw again; reporting a "next drawing" would be fiction.
+  if (GAMES[gameId]?.retiredOn) return null;
   const schedule = DRAW_SCHEDULE[gameId]?.[slot];
   if (!schedule) return null;
 

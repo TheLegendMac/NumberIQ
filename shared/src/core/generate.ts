@@ -151,6 +151,14 @@ export interface GenerateResult {
 
 export function generateTickets(ctx: GenerateContext): GenerateResult {
   const { game } = ctx;
+  // A retired game has no future drawing to play, so producing a ticket for it
+  // would be meaningless at best and misleading at worst.
+  if (game.retiredOn) {
+    throw new Error(
+      `${game.name} was retired after its final drawing on ${game.retiredOn} and can no longer be played. ` +
+      `Its history is still available for analysis.`,
+    );
+  }
   const rng = makeRng(ctx.seed ?? (Date.now() & 0xffffffff));
   const { pool, min, max } = poolFor(ctx);
   const warnings: string[] = [];

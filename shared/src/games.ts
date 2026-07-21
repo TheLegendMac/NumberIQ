@@ -141,6 +141,11 @@ export const GAMES: Record<GameId, GameDefinition> = {
     ],
     sourceFile: 'c4l',
     drawsPerWeek: 7,
+    retiredOn: '2026-02-21',
+    retiredNote:
+      'Cash4Life held its final drawing on 21 February 2026 and has been retired ' +
+      'across all participating states. The history below is complete and closed; ' +
+      'the game can no longer be played.',
     notes:
       'Lower tiers are fixed. The lifetime top prizes are shared if multiple winners ' +
       'hit them, so selection has a marginal effect at the top tiers only.',

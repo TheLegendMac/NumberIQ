@@ -90,6 +90,13 @@ export interface GameDefinition {
   /** Drawing cadence, for gap detection. */
   drawsPerWeek: number;
   /**
+   * Date of the game's final drawing, if it has been retired. A retired game
+   * keeps its history for analysis but must never be presented as playable —
+   * no next-drawing countdown, no ticket generation.
+   */
+  retiredOn?: string;
+  retiredNote?: string;
+  /**
    * Historical matrices, oldest first. The top-level `max`/`extraBall` fields
    * describe the *current* matrix; these describe earlier ones.
    */
