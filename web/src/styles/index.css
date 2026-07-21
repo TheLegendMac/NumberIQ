@@ -573,3 +573,6 @@ tbody tr:hover td { background: var(--surface-2); }
   .draw-row { flex-wrap: wrap; gap: 6px; }
   .draw-row-when { text-align: left; }
 }
+
+/* Status labels in dense tables must not wrap mid-phrase. */
+td .inline-note { white-space: nowrap; }

@@ -149,7 +149,15 @@ export function invalidateDraws(): void {
   drawCache.clear();
 }
 
+export interface HealthResponse {
+  ok: boolean;
+  draws: number;
+  /** Present only on the Cloudflare deployment. */
+  runtime?: string;
+}
+
 export const api = {
+  health: () => request<HealthResponse>('/health'),
   games: () => request<GameSummary[]>('/games'),
   odds: (id: GameId) => request<OddsResponse>(`/games/${id}/odds`),
   strategies: (id: GameId) => request<StrategyDefinition[]>(`/strategies?gameId=${id}`),

@@ -15,10 +15,12 @@
  * Mutations are never cached or replayed — a queued POST could double-save a
  * ticket, which would silently corrupt spending totals.
  */
-const VERSION = 'numberiq-v1';
+const VERSION = 'numberiq-v2';
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
+// Precached for offline boot only — the document is still fetched network-first
+// on every navigation, so these are a fallback, never the source of truth.
 const SHELL_URLS = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -71,17 +73,39 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Build assets are content-hashed, so a cache hit is always correct.
-  event.respondWith(
-    caches.match(request).then((hit) => {
-      if (hit) return hit;
-      return fetch(request).then((res) => {
-        if (res.ok && (url.pathname.startsWith('/assets/') || SHELL_URLS.includes(url.pathname))) {
+  // Content-hashed build assets: cache-first. The hash guarantees a hit is correct.
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((hit) => hit ?? fetch(request).then((res) => {
+        if (res.ok) {
           const copy = res.clone();
           caches.open(SHELL).then((c) => c.put(request, copy));
         }
         return res;
-      }).catch(() => caches.match('/index.html'));
-    }),
+      })),
+    );
+    return;
+  }
+
+  /**
+   * The HTML document is network-first, and this is load-bearing.
+   *
+   * index.html names the content-hashed bundles. Serving it cache-first would
+   * pin anyone who has visited once to that build forever — every future deploy
+   * would be invisible to them until the cache name changed. Cache-first is
+   * correct for hashed assets and actively wrong for the document that points
+   * at them.
+   */
+  event.respondWith(
+    fetch(request)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(SHELL).then((c) => c.put(request, copy));
+        }
+        return res;
+      })
+      .catch(async () => (await caches.match(request)) ?? (await caches.match('/index.html')) ??
+        new Response('You are offline.', { status: 503, headers: { 'content-type': 'text/plain' } })),
   );
 });

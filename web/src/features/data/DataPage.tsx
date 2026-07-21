@@ -1,11 +1,14 @@
 import { useRef, useState } from 'react';
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient, useQuery } from '@tanstack/react-query';
 import type { GameId } from '@numberiq/shared';
 import { api, dateLabel, slotLabel, type GameSummary, type IngestReport } from '../../lib/api.js';
 import { Button, Card, Chip, Notice, Skeleton } from '../../components/ui.js';
 
 export function DataPage({ games }: { games: GameSummary[] }) {
   const qc = useQueryClient();
+  // Where the data actually lives changes what this page can honestly claim.
+  const health = useQuery({ queryKey: ['health'], queryFn: api.health, staleTime: 5 * 60_000 });
+  const hosted = health.data?.runtime === 'cloudflare-workers';
   const [report, setReport] = useState<(IngestReport & { mapping?: Record<string, string> }) | null>(null);
   const [busy, setBusy] = useState<GameId | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -54,13 +57,31 @@ export function DataPage({ games }: { games: GameSummary[] }) {
     <>
       <header className="page-head">
         <h1>Data</h1>
-        <p>Official Florida Lottery history, stored locally. Nothing leaves your machine.</p>
+        <p>
+          {hosted
+            ? 'Official Florida Lottery history, stored in your own Cloudflare D1 database.'
+            : 'Official Florida Lottery history, stored locally. Nothing leaves your machine.'}
+        </p>
       </header>
+
+      {hosted && (
+        <div style={{ marginBottom: 14 }}>
+          <Notice tone="neutral" icon="i">
+            <strong>This is the hosted deployment.</strong> Drawing history lives in Cloudflare D1,
+            not on your machine. Downloading and parsing the Lottery's PDFs is a local-only task —
+            it exceeds what a Worker may compute, and an open sync endpoint would let anyone point
+            this deployment at the Lottery's servers. Run <code>npm run d1:seed</code> locally to
+            refresh what is stored here.
+          </Notice>
+        </div>
+      )}
 
       <Card
         title="Sources"
-        sub="Downloaded from the Florida Lottery's own published winning-number history files."
-        actions={<Button onClick={syncAll} disabled={busy !== null}>Sync all games</Button>}
+        sub={hosted
+          ? 'Published to D1 from a local ingest run. Syncing and importing are disabled here.'
+          : "Downloaded from the Florida Lottery's own published winning-number history files."}
+        actions={hosted ? undefined : <Button onClick={syncAll} disabled={busy !== null}>Sync all games</Button>}
       >
         <div className="table-scroll">
           <table>
@@ -101,18 +122,26 @@ export function DataPage({ games }: { games: GameSummary[] }) {
                       </div>
                     </td>
                     <td className="t-right">
-                      {q?.isLoading ? '…' : missing === 0
-                        ? <Chip tone="pos">None</Chip>
+                      {hosted
+                        ? <span className="inline-note">local only</span>
+                        : q?.isLoading ? '…'
+                        : missing === 0 ? <Chip tone="pos">None</Chip>
                         : <Chip tone="warn">{missing}</Chip>}
                     </td>
                     <td className="t-right">
                       <div className="row-tight" style={{ justifyContent: 'flex-end' }}>
-                        <Button size="sm" onClick={() => sync.mutate(g.id)} disabled={busy !== null}>
-                          {busy === g.id ? 'Syncing…' : 'Sync'}
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => { setImportTarget(g.id); fileInput.current?.click(); }}>
-                          Import
-                        </Button>
+                        {hosted ? (
+                          <span className="inline-note">read-only</span>
+                        ) : (
+                          <>
+                            <Button size="sm" onClick={() => sync.mutate(g.id)} disabled={busy !== null}>
+                              {busy === g.id ? 'Syncing…' : 'Sync'}
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => { setImportTarget(g.id); fileInput.current?.click(); }}>
+                              Import
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

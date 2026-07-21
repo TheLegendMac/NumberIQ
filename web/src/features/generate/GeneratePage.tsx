@@ -24,7 +24,6 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
   const [exclude, setExclude] = useState('');
   const [require, setRequire] = useState('');
   const [batchMode, setBatchMode] = useState<'independent' | 'low_overlap' | 'coverage'>('low_overlap');
-  const [showRest, setShowRest] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   // Re-render once a minute so the countdown stays truthful.
   const [, setTick] = useState(0);
@@ -51,7 +50,6 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
         batchMode, avoidTrivialPatterns: true,
       });
     },
-    onSuccess: () => setShowRest(false),
   });
 
   const save = useMutation({

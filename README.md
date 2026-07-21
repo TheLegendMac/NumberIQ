@@ -1,7 +1,10 @@
 # NumberIQ
 
-A local-first Florida Lottery analytics workbench. No accounts, no cloud, no telemetry, no ads.
-Everything runs on your machine against a local SQLite database of official draw history.
+A local-first Florida Lottery analytics workbench. No accounts, no telemetry, no ads.
+
+Runs two ways from one codebase: entirely on your machine against a local SQLite
+database, or deployed to Cloudflare Workers + D1. In both, all analysis is pure
+computation over official draw history — see [Hosting on Cloudflare](#hosting-on-cloudflare).
 
 **Positioning: the only lottery tool that tells you when it can't help you.**
 
