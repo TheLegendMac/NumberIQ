@@ -10,11 +10,11 @@ import { getDb } from '../db/index.js';
 import { DrawRepository, TicketRepository, SettingsRepository, IngestRunRepository } from '../db/repositories.js';
 import { syncGame, ingestDraws, analyzeGaps } from '../ingest/pipeline.js';
 import { parseSpreadsheet } from '../ingest/spreadsheet.js';
-import { computeStats, rollingFrequency } from '../analysis/stats.js';
-import { runRandomnessAudit } from '../analysis/randomness.js';
-import { estimatePopularity } from '../analysis/popularity.js';
-import { generateTickets } from '../generate/index.js';
-import { runBacktest } from '../backtest/index.js';
+import { computeStats, rollingFrequency } from '@numberiq/shared';
+import { runRandomnessAudit } from '@numberiq/shared';
+import { estimatePopularity } from '@numberiq/shared';
+import { generateTickets } from '@numberiq/shared';
+import { runBacktest } from '@numberiq/shared';
 import { checkPendingTickets, summarize, budgetStatus, budgetPlan } from '../analysis/tracker.js';
 
 export const api = Router();

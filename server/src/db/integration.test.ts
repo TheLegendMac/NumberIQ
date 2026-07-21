@@ -6,8 +6,8 @@ import { DrawRepository, TicketRepository, SettingsRepository } from './reposito
 import { ingestDraws, analyzeGaps } from '../ingest/pipeline.js';
 import { parseSpreadsheet } from '../ingest/spreadsheet.js';
 import { checkPendingTickets, summarize, budgetStatus, budgetPlan } from '../analysis/tracker.js';
-import { computeStats } from '../analysis/stats.js';
-import { runRandomnessAudit } from '../analysis/randomness.js';
+import { computeStats } from '@numberiq/shared';
+import { runRandomnessAudit } from '@numberiq/shared';
 
 let db: Database.Database;
 beforeEach(() => { db = createTestDb(); });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { getGame, makeRng, type Draw } from '@numberiq/shared';
-import { runBacktest } from './index.js';
-import { evaluateTicket, countMatches } from '../analysis/evaluate.js';
+import { getGame, makeRng, type Draw } from '../index.js';
+import { runBacktest } from './backtest.js';
+import { evaluateTicket, countMatches } from './evaluate.js';
 
 const fantasy5 = getGame('fantasy5');
 const powerball = getGame('powerball');

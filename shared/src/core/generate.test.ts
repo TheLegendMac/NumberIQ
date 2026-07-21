@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { getGame, mean } from '@numberiq/shared';
-import { generateTickets, isTrivialPattern, scoreTicket } from './index.js';
-import { estimatePopularity } from '../analysis/popularity.js';
+import { getGame, mean } from '../index.js';
+import { generateTickets, isTrivialPattern, scoreTicket } from './generate.js';
+import { estimatePopularity } from './popularity.js';
 
 const fantasy5 = getGame('fantasy5');
 const powerball = getGame('powerball');

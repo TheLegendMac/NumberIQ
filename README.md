@@ -52,6 +52,53 @@ npm run build     # production bundle; `npm start` then serves it from the serve
 
 ---
 
+## Hosting on Cloudflare
+
+Live: **https://numberiq.trappers-edge.workers.dev**
+
+```bash
+npm run d1:create      # once — then paste the id into wrangler.jsonc
+npm run d1:seed        # migrate + export local drawings + push to D1
+npm run cf:deploy      # build the SPA and deploy the Worker
+```
+
+### How the hosted version differs
+
+The Worker is deliberately thin: it serves the SPA and does D1 reads/writes,
+nothing more. **All analysis runs in the browser** — statistics, the randomness
+audit, generation and backtesting.
+
+That is not a shortcut. A backtest runs hundreds of Monte Carlo replications over
+hundreds of drawings; that is seconds of CPU and would exceed a Worker's
+per-request CPU budget. Because everything in `shared/src/core` is pure
+TypeScript with no platform APIs, the identical code runs in Node locally, in the
+browser when hosted, and in the Worker if it ever needs to. Drawing history is
+fetched once per game and cached, so re-running a backtest costs no network at all.
+
+**Ingest stays local.** Parsing ~87k drawings out of the Lottery's PDFs is far
+beyond a Worker's CPU budget, and an open sync endpoint would let anyone point
+your deployment at the Lottery's servers. So `/api/data/*/sync` returns 501 when
+hosted. To refresh the hosted data:
+
+```bash
+npx tsx server/src/cli/seed.ts   # download + parse locally
+npm run d1:export                # -> data/d1-seed.sql
+npm run d1:push                  # INSERT OR IGNORE, so it is idempotent
+```
+
+### Cost
+
+Free tier is sufficient: D1 holds the full history in ~17 MB against a 500 MB
+limit, and the Worker only serves assets and small JSON reads.
+
+### The deployment has no login
+
+Anyone with the URL can use it, including saving tickets and editing budgets.
+Nothing sensitive is exposed, but if you want it genuinely private, put
+Cloudflare Access in front of it (free for personal use) rather than building auth.
+
+---
+
 ## What it does
 
 **Ingest.** Downloads the Florida Lottery's own published winning-number history PDFs for all 11

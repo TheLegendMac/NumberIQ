@@ -10,8 +10,8 @@
  * produce — is the most direct evidence available that hot/cold/overdue patterns
  * are noise, and it is presented to the user in exactly those terms.
  */
-import type { Draw, GameDefinition } from '@numberiq/shared';
-import { chiSquarePValue, matrixForDate, mean, normalTwoTailP, stdev } from '@numberiq/shared';
+import type { Draw, GameDefinition } from '../index.js';
+import { chiSquarePValue, matrixForDate, mean, normalTwoTailP, stdev } from '../index.js';
 
 export interface RandomnessTest {
   name: string;

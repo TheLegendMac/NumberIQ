@@ -19,8 +19,8 @@
  * On fixed-payout games (Pick 2-5, Cash Pop) this model is not applied at all,
  * because prizes there are posted amounts that are never split.
  */
-import type { Draw, GameDefinition } from '@numberiq/shared';
-import { clamp } from '@numberiq/shared';
+import type { Draw, GameDefinition } from '../index.js';
+import { clamp } from '../index.js';
 
 export interface PopularityFactor {
   key: string;

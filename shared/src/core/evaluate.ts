@@ -2,7 +2,7 @@
  * Prize evaluation — shared by the backtester and the ticket tracker so that a
  * simulated win and a real win are scored by exactly the same code.
  */
-import type { Draw, GameDefinition, PrizeTier } from '@numberiq/shared';
+import type { Draw, GameDefinition, PrizeTier } from '../index.js';
 
 export interface Evaluation {
   matches: number;

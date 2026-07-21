@@ -21,10 +21,10 @@
  *     would swamp every other signal and produce absurd ROI figures. Jackpot
  *     tier hits are counted and reported separately.
  */
-import type { Draw, GameDefinition, StrategyId } from '@numberiq/shared';
-import { makeRng, mean, percentileRank, quantile, stdev } from '@numberiq/shared';
-import { generateTickets } from '../generate/index.js';
-import { evaluateTicket } from '../analysis/evaluate.js';
+import type { Draw, GameDefinition, StrategyId } from '../index.js';
+import { makeRng, mean, percentileRank, quantile, stdev } from '../index.js';
+import { generateTickets } from './generate.js';
+import { evaluateTicket } from './evaluate.js';
 
 export interface BacktestConfig {
   game: GameDefinition;

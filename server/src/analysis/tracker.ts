@@ -8,7 +8,7 @@
 import type Database from 'better-sqlite3';
 import { getGame, type GameId } from '@numberiq/shared';
 import { DrawRepository, TicketRepository, SettingsRepository } from '../db/repositories.js';
-import { evaluateTicket } from './evaluate.js';
+import { evaluateTicket } from '@numberiq/shared';
 
 export interface TrackerSummary {
   ticketCount: number;

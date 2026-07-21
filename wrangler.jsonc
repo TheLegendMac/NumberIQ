@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "numberiq",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2025-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The Worker serves the built SPA and handles /api/* itself.
+  "assets": {
+    "directory": "./web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "numberiq",
+      "database_id": "fd2e5a29-0bb7-4ad0-9f47-b3d6308e6aaf",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "observability": { "enabled": true }
+}

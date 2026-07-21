@@ -7,8 +7,8 @@
  * summaries, which feed the coverage and popularity models, and the observed-vs-
  * expected comparisons, which feed the randomness audit.
  */
-import type { Draw, GameDefinition } from '@numberiq/shared';
-import { matrixForDate, mean, stdev } from '@numberiq/shared';
+import type { Draw, GameDefinition } from '../index.js';
+import { matrixForDate, mean, stdev } from '../index.js';
 
 export interface NumberStat {
   n: number;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getGame, chiSquarePValue, normalCdf, choose, waysToMatch, makeRng, type Draw } from '@numberiq/shared';
+import { getGame, chiSquarePValue, normalCdf, choose, waysToMatch, makeRng, type Draw } from '../index.js';
 import { runRandomnessAudit } from './randomness.js';
 import { estimatePopularity, numberPopularityWeight } from './popularity.js';
 

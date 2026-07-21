@@ -3,11 +3,11 @@ import { getGame } from '@numberiq/shared';
 import { getDb } from '../db/index.js';
 import { DrawRepository } from '../db/repositories.js';
 import { analyzeGaps } from '../ingest/pipeline.js';
-import { computeStats } from '../analysis/stats.js';
-import { runRandomnessAudit } from '../analysis/randomness.js';
-import { generateTickets } from '../generate/index.js';
-import { runBacktest } from '../backtest/index.js';
-import { estimatePopularity } from '../analysis/popularity.js';
+import { computeStats } from '@numberiq/shared';
+import { runRandomnessAudit } from '@numberiq/shared';
+import { generateTickets } from '@numberiq/shared';
+import { runBacktest } from '@numberiq/shared';
+import { estimatePopularity } from '@numberiq/shared';
 
 const db = getDb();
 const repo = new DrawRepository(db);

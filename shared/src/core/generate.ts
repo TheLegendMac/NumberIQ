@@ -8,9 +8,9 @@
  */
 import type {
   Draw, GameDefinition, GeneratedTicket, ScoreComponent, StrategyId, StrategyScore,
-} from '@numberiq/shared';
-import { clamp, makeRng, matrixForDate, weightedSampleDistinct } from '@numberiq/shared';
-import { estimatePopularity, numberPopularityWeight } from '../analysis/popularity.js';
+} from '../index.js';
+import { clamp, makeRng, matrixForDate, weightedSampleDistinct } from '../index.js';
+import { estimatePopularity, numberPopularityWeight } from './popularity.js';
 
 export interface GenerateContext {
   game: GameDefinition;

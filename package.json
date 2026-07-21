@@ -4,8 +4,14 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Local-first Florida Lottery analytics workbench. Personal use only.",
-  "workspaces": ["shared", "server", "web"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm run dev --workspace server",
@@ -14,12 +20,22 @@
     "start": "npm run start --workspace server",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit --pretty"
+    "typecheck": "tsc --noEmit --pretty",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "npm run build && wrangler deploy",
+    "d1:create": "wrangler d1 create numberiq",
+    "d1:migrate": "wrangler d1 migrations apply numberiq --remote",
+    "d1:export": "tsx server/src/cli/export-d1.ts",
+    "d1:push": "wrangler d1 execute numberiq --remote --file=./data/d1-seed.sql",
+    "d1:seed": "npm run d1:migrate && npm run d1:export && npm run d1:push"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260721.1",
     "@types/node": "^22.10.2",
     "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.112.0"
   }
 }
