@@ -1,23 +1,26 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type GameSummary } from './lib/api.js';
-import { GeneratePage } from './features/generate/GeneratePage.js';
+import { TodayPage } from './features/today/TodayPage.js';
 import { Skeleton, ErrorBox } from './components/ui.js';
 import type { GameId } from '@numberiq/shared';
 
 /**
- * Generate is the default route and stays in the main bundle so the primary task
- * is instant. The chart-heavy routes pull in Recharts, which is most of the
- * payload — they load on demand instead of taxing every first paint.
+ * Today is the default route and stays in the main bundle so the daily question —
+ * what drew, did it hit, what is next — is answered on first paint. The
+ * chart-heavy routes pull in Recharts, which is most of the payload; they load on
+ * demand instead of taxing every visit.
  */
+const GeneratePage = lazy(() => import('./features/generate/GeneratePage.js').then((m) => ({ default: m.GeneratePage })));
 const AnalyzePage = lazy(() => import('./features/analyze/AnalyzePage.js').then((m) => ({ default: m.AnalyzePage })));
 const BacktestPage = lazy(() => import('./features/backtest/BacktestPage.js').then((m) => ({ default: m.BacktestPage })));
 const TicketsPage = lazy(() => import('./features/track/TicketsPage.js').then((m) => ({ default: m.TicketsPage })));
 const DataPage = lazy(() => import('./features/data/DataPage.js').then((m) => ({ default: m.DataPage })));
 
-type Route = 'generate' | 'analyze' | 'backtest' | 'tickets' | 'data';
+type Route = 'today' | 'generate' | 'analyze' | 'backtest' | 'tickets' | 'data';
 
 const NAV: Array<{ id: Route; label: string; icon: string }> = [
+  { id: 'today', label: 'Today', icon: '☉' },
   { id: 'generate', label: 'Generate', icon: '◆' },
   { id: 'analyze', label: 'Analyze', icon: '▦' },
   { id: 'backtest', label: 'Backtest', icon: '⟲' },
@@ -28,7 +31,7 @@ const NAV: Array<{ id: Route; label: string; icon: string }> = [
 function useHashRoute(): [Route, (r: Route) => void] {
   const read = (): Route => {
     const h = window.location.hash.replace('#/', '') as Route;
-    return NAV.some((n) => n.id === h) ? h : 'generate';
+    return NAV.some((n) => n.id === h) ? h : 'today';
   };
   const [route, setRoute] = useState<Route>(read);
   useEffect(() => {
@@ -80,7 +83,7 @@ export function App() {
   return (
     <div className="shell">
       <nav className="rail" aria-label="Main">
-        <button className="brand" onClick={() => go('generate')} aria-label="NumberIQ — go to Generate">
+        <button className="brand" onClick={() => go('today')} aria-label="NumberIQ — go to Today">
           <span className="brand-mark" aria-hidden="true">IQ</span>
           <span className="brand-text">
             NumberIQ
@@ -115,6 +118,7 @@ export function App() {
           {games.isError && <ErrorBox error={games.error} />}
           {games.data && (
             <Suspense fallback={<Skeleton rows={5} />}>
+              {route === 'today' && <TodayPage games={games.data} go={(r) => go(r as Route)} />}
               {route === 'generate' && <GeneratePage games={games.data} gameId={gameId} setGameId={setGameId} />}
               {route === 'analyze' && <AnalyzePage games={games.data} gameId={gameId} setGameId={setGameId} />}
               {route === 'backtest' && <BacktestPage games={games.data} gameId={gameId} setGameId={setGameId} />}

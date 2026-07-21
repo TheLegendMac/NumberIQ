@@ -117,6 +117,19 @@ function floridaParts(date: Date): { y: number; m: number; d: number; weekday: W
   };
 }
 
+/**
+ * The calendar date of an instant *in Florida*, as `yyyy-mm-dd`.
+ *
+ * This is the only correct way to compare a wall-clock instant against a
+ * `drawDate`, which is always a Florida date. Slicing an ISO timestamp yields a
+ * UTC date instead, which runs a day ahead of Florida every evening — so an
+ * evening drawing would be judged to have happened "tomorrow".
+ */
+export function floridaDate(date = new Date()): string {
+  const { y, m, d } = floridaParts(date);
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
+
 export interface NextDrawing {
   /** ISO date of the drawing, in Florida terms — the key used for tickets. */
   drawDate: string;

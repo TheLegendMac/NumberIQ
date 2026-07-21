@@ -47,7 +47,7 @@ npm run dev                       # server on :5178, UI on :5177
 Open <http://localhost:5177>.
 
 ```bash
-npm test          # 116 tests
+npm test          # 129 tests
 npm run typecheck
 npm run build     # production bundle; `npm start` then serves it from the server
 ```
@@ -102,6 +102,10 @@ Cloudflare Access in front of it (free for personal use) rather than building au
 ---
 
 ## What it does
+
+**Today.** The landing screen, and the only one built for daily use rather than investigation:
+the latest drawing for every game you hold a ticket on, what those tickets did, net position,
+countdowns to the next drawings, and budget. Everything else on this list is a click away from it.
 
 **Ingest.** Downloads the Florida Lottery's own published winning-number history PDFs for all 11
 games and parses them with a geometric layout engine (y-clustering → column splitting → per-game

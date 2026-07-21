@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  nextDrawingForSlot, nextDrawing, describeSchedule, formatCountdown, DRAW_SCHEDULE,
+  nextDrawingForSlot, nextDrawing, describeSchedule, formatCountdown, floridaDate, DRAW_SCHEDULE,
 } from './schedule.js';
 import { GAME_LIST } from './games.js';
 
@@ -97,6 +97,28 @@ describe('drawing schedule', () => {
     expect(formatCountdown(3 * 3_600_000 + 12 * 60_000)).toBe('in 3h 12m');
     expect(formatCountdown(26 * 3_600_000)).toBe('tomorrow');
     expect(formatCountdown(3 * 86_400_000)).toBe('in 3 days');
+  });
+
+  describe('floridaDate', () => {
+    it('reports the Florida date, not the UTC one, after 8pm ET', () => {
+      // 9:30pm EDT Tuesday is already Wednesday in UTC. A drawing at this hour
+      // still belongs to Tuesday, which is what `drawDate` records.
+      const evening = new Date('2026-07-22T01:30:00Z');
+      expect(evening.toISOString().slice(0, 10)).toBe('2026-07-22'); // the trap
+      expect(floridaDate(evening)).toBe('2026-07-21');
+    });
+
+    it('agrees with the drawDate the scheduler produces', () => {
+      // Whatever instant an evening drawing happens at, dating that instant in
+      // Florida terms must reproduce the scheduler's own drawDate.
+      const next = nextDrawingForSlot('pick3', 'evening', TUE_10AM_ET)!;
+      expect(floridaDate(next.at)).toBe(next.drawDate);
+    });
+
+    it('holds across a DST boundary', () => {
+      // 1:30am EST on 1 Nov 2026, an hour after clocks fall back.
+      expect(floridaDate(new Date('2026-11-01T06:30:00Z'))).toBe('2026-11-01');
+    });
   });
 });
 
