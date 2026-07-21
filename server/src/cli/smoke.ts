@@ -13,7 +13,7 @@ const db = getDb();
 const repo = new DrawRepository(db);
 
 console.log('=== GAP DETECTION (after schedule-aware fix) ===');
-for (const id of ['powerball', 'cash4life', 'fantasy5', 'pick3'] as const) {
+for (const id of ['powerball', 'fantasy5', 'pick3'] as const) {
   for (const g of analyzeGaps(db, id)) {
     console.log(`  ${id}/${g.slot}: ${g.count} draws, ${g.missing.length} missing in scan window (${g.scanWindow?.from}→${g.scanWindow?.to})`);
   }

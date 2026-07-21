@@ -114,43 +114,6 @@ export const GAMES: Record<GameId, GameDefinition> = {
       'Prize figures shown are historical averages, not guarantees.',
   },
 
-  cash4life: {
-    id: 'cash4life',
-    name: 'Cash4Life',
-    shortName: 'C4L',
-    payoutModel: 'split_jackpot',
-    kind: 'combination',
-    pick: 5,
-    min: 1,
-    max: 60,
-    extraBall: { key: 'cashBall', label: 'Cash Ball', min: 1, max: 4 },
-    slots: ['main'],
-    basePrice: 2,
-    topPrizeOneIn: 21_846_048,
-    overallOneIn: 7.76,
-    prizeTiers: [
-      { match: 5, extra: true, label: '$1,000/day for life', prize: null, oneIn: 21_846_048, isJackpot: true },
-      { match: 5, extra: false, label: '$1,000/week for life', prize: null, oneIn: 7_282_016 },
-      { match: 4, extra: true, label: '4 + Cash Ball', prize: 2500, oneIn: 79_440 },
-      { match: 4, extra: false, label: '4 of 5', prize: 500, oneIn: 26_480 },
-      { match: 3, extra: true, label: '3 + Cash Ball', prize: 100, oneIn: 1_471 },
-      { match: 3, extra: false, label: '3 of 5', prize: 25, oneIn: 490.3 },
-      { match: 2, extra: true, label: '2 + Cash Ball', prize: 10, oneIn: 83.3 },
-      { match: 2, extra: false, label: '2 of 5', prize: 4, oneIn: 27.8 },
-      { match: 1, extra: true, label: '1 + Cash Ball', prize: 2, oneIn: 12.8 },
-    ],
-    sourceFile: 'c4l',
-    drawsPerWeek: 7,
-    retiredOn: '2026-02-21',
-    retiredNote:
-      'Cash4Life held its final drawing on 21 February 2026 and has been retired ' +
-      'across all participating states. The history below is complete and closed; ' +
-      'the game can no longer be played.',
-    notes:
-      'Lower tiers are fixed. The lifetime top prizes are shared if multiple winners ' +
-      'hit them, so selection has a marginal effect at the top tiers only.',
-  },
-
   lotto: {
     id: 'lotto',
     name: 'Florida Lotto',

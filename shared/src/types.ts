@@ -12,7 +12,7 @@ export type PayoutModel = 'fixed' | 'parimutuel' | 'split_jackpot';
 
 export type GameId =
   | 'pick2' | 'pick3' | 'pick4' | 'pick5'
-  | 'fantasy5' | 'cashpop' | 'cash4life'
+  | 'fantasy5' | 'cashpop'
   | 'lotto' | 'jackpot_triple_play'
   | 'megamillions' | 'powerball';
 
@@ -89,13 +89,6 @@ export interface GameDefinition {
   sourceFile: string;
   /** Drawing cadence, for gap detection. */
   drawsPerWeek: number;
-  /**
-   * Date of the game's final drawing, if it has been retired. A retired game
-   * keeps its history for analysis but must never be presented as playable —
-   * no next-drawing countdown, no ticket generation.
-   */
-  retiredOn?: string;
-  retiredNote?: string;
   /**
    * Historical matrices, oldest first. The top-level `max`/`extraBall` fields
    * describe the *current* matrix; these describe earlier ones.

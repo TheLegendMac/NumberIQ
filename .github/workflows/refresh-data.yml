@@ -87,7 +87,7 @@ jobs:
           node -e '
             const games = JSON.parse(process.argv[1]);
             const rows = games
-              .filter((g) => g.data.length && !g.retiredOn)
+              .filter((g) => g.data.length)
               .map((g) => ({ name: g.name, last: g.data.map((d) => d.last).sort().pop() }))
               .sort((a, b) => a.last.localeCompare(b.last));
             for (const r of rows) console.log(`  ${r.name.padEnd(22)} ${r.last}`);

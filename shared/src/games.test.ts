@@ -28,9 +28,6 @@ describe('game matrices reproduce published odds', () => {
     expect(choose(46, 6)).toBe(9_366_819);
   });
 
-  it('Cash4Life: 5/60 + 1/4', () => {
-    expect(totalCombinations(60, 5, 4)).toBe(21_846_048);
-  });
 
   /**
    * The strongest check available: derive overall odds for the extra-ball games
@@ -52,7 +49,7 @@ describe('game matrices reproduce published odds', () => {
   });
 
   it('every declared tier oneIn matches the matrix', () => {
-    for (const id of ['powerball', 'megamillions', 'cash4life'] as const) {
+    for (const id of ['powerball', 'megamillions'] as const) {
       const g = GAMES[id];
       const pool = g.max - g.min + 1;
       const extraPool = g.extraBall ? g.extraBall.max - g.extraBall.min + 1 : 1;

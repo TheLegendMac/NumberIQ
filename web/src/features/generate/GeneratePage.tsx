@@ -182,16 +182,6 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
         </Card>
       )}
 
-      {game.retiredOn && (
-        <div style={{ marginBottom: 14 }}>
-          <Notice>
-            <strong>{game.name} has been retired.</strong> {game.retiredNote}{' '}
-            You can still explore its history under Analyze, but there is no drawing
-            left to play.
-          </Notice>
-        </div>
-      )}
-
       {/* --- Budget block is the one thing that must interrupt --- */}
       {budget?.exceeded && (
         <div style={{ marginBottom: 14 }}>
@@ -234,7 +224,7 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
             <p className="hero-explain">{hero.score.explanation}</p>
 
             <div className="hero-actions">
-              <Button variant="primary" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || budget?.exceeded || !!game.retiredOn}>
+              <Button variant="primary" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || budget?.exceeded}>
                 {generate.isPending ? 'Generating…' : 'Generate again'}
               </Button>
               <Button size="lg" onClick={() => save.mutate(result)} disabled={save.isPending}>
@@ -366,7 +356,7 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
               : 'No history loaded yet — visit the Data tab to sync official results.'}
           </p>
           <div className="hero-actions">
-            <Button variant="primary" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || budget?.exceeded || !!game.retiredOn}>
+            <Button variant="primary" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || budget?.exceeded}>
               {generate.isPending ? 'Generating…' : 'Generate numbers'}
             </Button>
           </div>

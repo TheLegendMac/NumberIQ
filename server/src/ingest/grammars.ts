@@ -199,7 +199,6 @@ export const GRAMMARS: Record<GameId, Grammar> = {
   pick5: pickGrammar('pick5', 5),
   fantasy5: fantasy5Grammar,
   cashpop: cashPopGrammar,
-  cash4life: extraBallGrammar('cash4life', 5, 'cashBall', /^CB\s*(\d+)?$/i),
   megamillions: extraBallGrammar('megamillions', 5, 'megaBall', /^MB\s*(\d+)?$/i),
   powerball: extraBallGrammar('powerball', 5, 'powerball', /^PB\s*(\d+)?$/i),
   lotto: plainCombinationGrammar('lotto', 6, true),

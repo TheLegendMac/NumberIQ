@@ -49,7 +49,6 @@ export function TicketsPage({ games }: { games: GameSummary[] }) {
 
   // Games you actually hold tickets for, soonest drawing first.
   const upcoming = games
-    .filter((g) => !g.retiredOn)
     .map((g) => ({ game: g, next: nextDrawing(g.id) }))
     .filter((x): x is { game: GameSummary; next: NonNullable<ReturnType<typeof nextDrawing>> } => x.next !== null)
     .sort((a, b) => a.next.msUntil - b.next.msUntil);

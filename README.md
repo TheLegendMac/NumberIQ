@@ -29,7 +29,6 @@ Crucially, this only applies to some games:
 | Pick 2 / 3 / 4 / 5, Cash Pop | Fixed payout | **No. Not at all.** |
 | Fantasy 5, Florida Lotto, Jackpot Triple Play | Pari-mutuel | **Yes** |
 | Powerball, Mega Millions | Split jackpot | **Yes, at the jackpot tier** |
-| Cash4Life | Mostly fixed | Marginal |
 
 On fixed-payout games the app shows a permanent, non-dismissible notice saying no strategy —
 including its own — can improve your expected value, and it hides the strategies that would

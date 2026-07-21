@@ -11,7 +11,6 @@
  * that rather than presenting them as permanently authoritative.
  */
 import type { GameId } from './types.js';
-import { GAMES } from './games.js';
 
 export const SCHEDULE_VERIFIED = '2026-07-21';
 export const LOTTERY_TIMEZONE = 'America/New_York';
@@ -56,9 +55,6 @@ export const DRAW_SCHEDULE: Record<GameId, Record<string, SlotSchedule>> = {
     afternoon: { days: DAILY, hour: 14, minute: 45 },
     evening: { days: DAILY, hour: 18, minute: 45 },
     late_night: { days: DAILY, hour: 23, minute: 45 },
-  },
-  cash4life: {
-    main: { days: DAILY, hour: 21, minute: 0 },
   },
   lotto: {
     // Wednesday and Saturday. Double Play is drawn immediately after.
@@ -141,8 +137,6 @@ function formatTime(hour: number, minute: number): string {
 
 /** The next drawing for one slot, searching forward up to two weeks. */
 export function nextDrawingForSlot(gameId: GameId, slot: string, now = new Date()): NextDrawing | null {
-  // A retired game will never draw again; reporting a "next drawing" would be fiction.
-  if (GAMES[gameId]?.retiredOn) return null;
   const schedule = DRAW_SCHEDULE[gameId]?.[slot];
   if (!schedule) return null;
 

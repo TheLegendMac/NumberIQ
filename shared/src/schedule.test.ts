@@ -70,7 +70,7 @@ describe('drawing schedule', () => {
 
   it('always returns a drawing in the future', () => {
     const now = new Date();
-    for (const game of GAME_LIST.filter((g) => !g.retiredOn)) {
+    for (const game of GAME_LIST) {
       const next = nextDrawing(game.id, now);
       expect(next, game.name).not.toBeNull();
       expect(next!.at.getTime(), game.name).toBeGreaterThan(now.getTime());
@@ -80,7 +80,7 @@ describe('drawing schedule', () => {
 
   it('never proposes a drawing more than a week out', () => {
     const now = new Date();
-    for (const game of GAME_LIST.filter((g) => !g.retiredOn)) {
+    for (const game of GAME_LIST) {
       expect(nextDrawing(game.id, now)!.msUntil, game.name).toBeLessThan(8 * 86_400_000);
     }
   });
@@ -100,17 +100,3 @@ describe('drawing schedule', () => {
   });
 });
 
-describe('retired games', () => {
-  it('never reports a next drawing for a retired game', () => {
-    // Cash4Life held its final drawing on 2026-02-21. Reporting a countdown for
-    // it would be inventing a drawing that can never happen.
-    expect(nextDrawing('cash4life')).toBeNull();
-    expect(nextDrawingForSlot('cash4life', 'main')).toBeNull();
-  });
-
-  it('still reports drawings for every live game', () => {
-    for (const game of GAME_LIST.filter((g) => !g.retiredOn)) {
-      expect(nextDrawing(game.id), game.name).not.toBeNull();
-    }
-  });
-});
