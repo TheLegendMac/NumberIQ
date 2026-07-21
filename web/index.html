@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>NumberIQ — Florida Lottery Analytics</title>
+    <meta name="description" content="Local-first Florida Lottery analytics. Statistically honest." />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%234f8df7'/><text x='16' y='23' font-size='17' font-weight='bold' text-anchor='middle' fill='white' font-family='sans-serif'>IQ</text></svg>"
+    />
+    <style>
+      /* Shown until React mounts, so a failed boot is never a silent blank page. */
+      #boot {
+        position: fixed; inset: 0; display: grid; place-items: center;
+        background: #0a0b0d; color: #8b94a3; font: 14px -apple-system, BlinkMacSystemFont, sans-serif;
+        text-align: center; padding: 24px;
+      }
+      #boot h1 { color: #e9edf3; font-size: 17px; margin: 0 0 8px; }
+      #boot code { color: #4f8df7; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <div id="boot">
+      <div>
+        <h1>Starting NumberIQ…</h1>
+        <p>If this message stays on screen, the interface failed to load.</p>
+        <p style="margin-top: 10px">
+          Try a hard reload (<code>Cmd+Shift+R</code>), and confirm the server is running with
+          <code>npm run dev</code>.
+        </p>
+        <noscript>
+          <p style="color: #f5b84c; margin-top: 10px">
+            JavaScript is disabled. NumberIQ needs it to run.
+          </p>
+        </noscript>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

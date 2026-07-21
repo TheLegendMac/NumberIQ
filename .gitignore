@@ -1,0 +1,12 @@
+node_modules/
+dist/
+# Anchored to the repo root: an unanchored "data/" also matches
+# web/src/features/data/, which would silently exclude source files.
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.cache/
+.DS_Store
+*.local

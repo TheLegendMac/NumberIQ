@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "types": ["node", "vite/client"],
+    "paths": { "@numberiq/shared": ["./shared/src/index.ts"] },
+    "baseUrl": "."
+  },
+  "include": ["shared/src", "server/src", "web/src", "vitest.config.ts"]
+}
