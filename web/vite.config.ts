@@ -7,5 +7,5 @@ export default defineConfig({
     port: 5177,
     proxy: { '/api': 'http://127.0.0.1:5178' },
   },
-  build: { outDir: 'dist', sourcemap: true },
+  build: { outDir: 'dist', sourcemap: false },
 });

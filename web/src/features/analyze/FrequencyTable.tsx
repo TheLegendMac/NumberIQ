@@ -16,6 +16,10 @@ const TOP_N = 6;
  * without this figure would invite exactly the reading the ranking cannot support.
  */
 function evenness(counts: Array<{ n: number; count: number }>) {
+  if (counts.length === 0) {
+    const empty = { n: 0, count: 0 };
+    return { expected: 0, p: 1, high: empty, low: empty };
+  }
   const total = counts.reduce((s, c) => s + c.count, 0);
   const expected = total / counts.length;
   const chi2 = counts.reduce((s, c) => s + (c.count - expected) ** 2 / expected, 0);
@@ -27,7 +31,7 @@ function evenness(counts: Array<{ n: number; count: number }>) {
   };
 }
 
-function GameRow({ game }: { game: GameFrequency }) {
+function GameRow({ game, totalGames }: { game: GameFrequency; totalGames: number }) {
   const [open, setOpen] = useState(false);
   const ranked = [...game.counts].sort((a, b) => b.count - a.count || a.n - b.n);
   const { expected, p, high, low } = evenness(game.counts);
@@ -43,7 +47,7 @@ function GameRow({ game }: { game: GameFrequency }) {
             {game.eraStart && ' · current number pool only'}
           </div>
         </div>
-        <button className="freq-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <button type="button" className="freq-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
           {open ? 'Hide all' : `All ${game.counts.length}`}
         </button>
       </div>
@@ -79,7 +83,7 @@ function GameRow({ game }: { game: GameFrequency }) {
         ) : (
           <>Most-drawn <strong>{high.n}</strong> ({high.count.toLocaleString()}) vs least-drawn{' '}
             <strong>{low.n}</strong> ({low.count.toLocaleString()}). A gap this size occurs in only{' '}
-            {(p * 100).toFixed(1)}% of fair machines — unusual, though with ten games checked at once
+            {(p * 100).toFixed(1)}% of fair machines — unusual, though with {totalGames} games checked at once
             one flag is itself expected.</>
         )}
       </p>
@@ -89,6 +93,7 @@ function GameRow({ game }: { game: GameFrequency }) {
 
 export function FrequencyTable() {
   const freq = useQuery({ queryKey: ['frequency'], queryFn: api.frequency, staleTime: 10 * 60_000 });
+  const allEven = freq.data?.every((game) => evenness(game.counts).p >= 0.05) ?? true;
 
   return (
     <Card
@@ -101,17 +106,21 @@ export function FrequencyTable() {
       {freq.data && (
         <>
           <div className="freq-list">
-            {freq.data.map((g) => <GameRow key={g.gameId} game={g} />)}
+            {freq.data.map((g) => <GameRow key={g.gameId} game={g} totalGames={freq.data.length} />)}
           </div>
 
           <div style={{ marginTop: 16 }}>
             <Reading
-              tone={freq.data.every((g) => evenness(g.counts).p >= 0.05) ? 'pos' : 'warn'}
+              tone={allEven ? 'pos' : 'warn'}
               plain={
-                <>These are the real counts, and they are worth exactly nothing as a forecast.
-                  Every game above is <strong>statistically even</strong> — the gaps between the most
-                  and least drawn numbers are the size randomness produces on its own. A number that
-                  has led for thirty years has the same chance tonight as one that has trailed.</>
+                allEven
+                  ? <>These are the real counts, and they are worth exactly nothing as a forecast.
+                      Every game above is <strong>statistically even</strong> — the gaps between the most
+                      and least drawn numbers are the size randomness produces on its own. A number that
+                      has led for thirty years has the same chance tonight as one that has trailed.</>
+                  : <>These counts contain at least one unusually uneven result, but checking{' '}
+                      <strong>{freq.data.length} games at once</strong> creates many chances for a random
+                      flag. Treat it as a prompt to inspect the fairness audit, never as a forecast.</>
               }
               technical={
                 <>Chi-square goodness-of-fit against a uniform pool, per game:{' '}

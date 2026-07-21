@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GAMES, matrixForDate } from './games.js';
+import { GAMES, matrixForDate, strategiesForGame } from './games.js';
 import type { GameDefinition } from './types.js';
 
 export const gameIdSchema = z.enum(
@@ -141,11 +141,58 @@ export const saveTicketSchema = z.object({
   numbers: z.array(z.number().int()),
   extras: z.record(z.string(), z.number().int()).default({}),
   strategy: z.string(),
-  score: z.number().nullable().default(null),
+  score: z.number().min(0).max(100).nullable().default(null),
   cost: z.number().nonnegative(),
   drawSlot: z.string().default('main'),
   targetDrawDate: isoDateSchema.nullable().default(null),
   note: z.string().max(500).nullable().default(null),
+}).superRefine((ticket, ctx) => {
+  const game = GAMES[ticket.gameId];
+  const today = new Date().toISOString().slice(0, 10);
+  const matrix = matrixForDate(game, ticket.targetDrawDate ?? today);
+
+  if (ticket.numbers.length !== game.pick) {
+    ctx.addIssue({
+      code: 'custom', path: ['numbers'],
+      message: `Expected exactly ${game.pick} numbers for ${game.name}`,
+    });
+  }
+  for (let i = 0; i < ticket.numbers.length; i++) {
+    const n = ticket.numbers[i]!;
+    if (n < matrix.min || n > matrix.max) {
+      ctx.addIssue({
+        code: 'custom', path: ['numbers', i],
+        message: `Number must be between ${matrix.min} and ${matrix.max}`,
+      });
+    }
+  }
+  if (game.kind === 'combination' && new Set(ticket.numbers).size !== ticket.numbers.length) {
+    ctx.addIssue({ code: 'custom', path: ['numbers'], message: 'Combination tickets cannot repeat numbers' });
+  }
+  if (!game.slots.includes(ticket.drawSlot)) {
+    ctx.addIssue({ code: 'custom', path: ['drawSlot'], message: `Unknown drawing for ${game.name}` });
+  }
+  if (!strategiesForGame(game).some((strategy) => strategy.id === ticket.strategy)) {
+    ctx.addIssue({ code: 'custom', path: ['strategy'], message: `Strategy is not available for ${game.name}` });
+  }
+  if (ticket.cost !== game.basePrice) {
+    ctx.addIssue({
+      code: 'custom', path: ['cost'],
+      message: `Base ticket cost for ${game.name} is ${game.basePrice}`,
+    });
+  }
+
+  if (game.extraBall) {
+    const extra = ticket.extras[game.extraBall.key];
+    const min = matrix.extraMin ?? game.extraBall.min;
+    const max = matrix.extraMax ?? game.extraBall.max;
+    if (extra === undefined || extra < min || extra > max) {
+      ctx.addIssue({
+        code: 'custom', path: ['extras', game.extraBall.key],
+        message: `${game.extraBall.label} must be between ${min} and ${max}`,
+      });
+    }
+  }
 });
 
 export const settingsSchema = z.object({

@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "numberiq",
   "main": "worker/src/index.ts",
-  "compatibility_date": "2025-07-01",
+  "compatibility_date": "2026-07-21",
   "compatibility_flags": ["nodejs_compat"],
 
   // The Worker serves the built SPA and handles /api/* itself.
@@ -21,5 +21,9 @@
     }
   ],
 
-  "observability": { "enabled": true }
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  }
 }

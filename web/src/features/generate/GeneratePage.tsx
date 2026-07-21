@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GameId, StrategyDefinition } from '@numberiq/shared';
 import { nextDrawingForSlot, formatCountdown, describeSchedule } from '@numberiq/shared';
@@ -25,6 +25,8 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
   const [require, setRequire] = useState('');
   const [batchMode, setBatchMode] = useState<'independent' | 'low_overlap' | 'coverage'>('low_overlap');
   const [toast, setToast] = useState<string | null>(null);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Re-render once a minute so the countdown stays truthful.
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -39,17 +41,17 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
   const currentSlot = game.slots.includes(slot) ? slot : game.slots[game.slots.length - 1]!;
   const activeStrategy: StrategyDefinition | undefined =
     strategies.data?.find((s) => s.id === strategy) ?? strategies.data?.[0];
+  const generationKey = JSON.stringify([
+    gameId, currentSlot, activeStrategy?.id ?? 'balanced', count, exclude, require, batchMode,
+  ]);
 
   const generate = useMutation({
-    mutationFn: () => {
+    mutationFn: ({ body }: { key: string; body: Record<string, unknown> }) => {
       // Light haptic on supported devices — confirms the tap without a sound.
       navigator.vibrate?.(12);
-      return api.generate({
-        gameId, strategy: activeStrategy?.id ?? 'balanced', slot: currentSlot, count,
-        exclude: parseNumbers(exclude), require: parseNumbers(require),
-        batchMode, avoidTrivialPatterns: true,
-      });
+      return api.generate(body);
     },
+    onSuccess: (_result, variables) => setGeneratedKey(variables.key),
   });
 
   const save = useMutation({
@@ -73,14 +75,32 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
       );
       void qc.invalidateQueries({ queryKey: ['tracker'] });
       void qc.invalidateQueries({ queryKey: ['tickets'] });
-      setTimeout(() => setToast(null), 3200);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      toastTimer.current = setTimeout(() => setToast(null), 3200);
     },
   });
+
+  useEffect(() => () => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+  }, []);
+
+  const beginGenerate = () => {
+    save.reset();
+    setToast(null);
+    generate.mutate({
+      key: generationKey,
+      body: {
+        gameId, strategy: activeStrategy?.id ?? 'balanced', slot: currentSlot, count,
+        exclude: parseNumbers(exclude), require: parseNumbers(require),
+        batchMode, avoidTrivialPatterns: true,
+      },
+    });
+  };
 
   const upcoming = nextDrawingForSlot(gameId, currentSlot);
   const isFixed = game.payoutModel === 'fixed';
   const budget = settings.data?.budget;
-  const result = generate.data;
+  const result = generatedKey === generationKey ? generate.data : undefined;
   const hero = result?.tickets[0];
   const rest = result?.tickets.slice(1) ?? [];
 
@@ -192,7 +212,11 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
         </div>
       )}
 
+      {strategies.isError && <div style={{ marginBottom: 14 }}><ErrorBox error={strategies.error} /></div>}
+      {odds.isError && <div style={{ marginBottom: 14 }}><ErrorBox error={odds.error} /></div>}
+      {settings.isError && <div style={{ marginBottom: 14 }}><ErrorBox error={settings.error} /></div>}
       {generate.isError && <div style={{ marginBottom: 14 }}><ErrorBox error={generate.error} /></div>}
+      {save.isError && <div style={{ marginBottom: 14 }}><ErrorBox error={save.error} /></div>}
 
       {/* --- THE HERO: the thing you came for --- */}
       {hero && result && (
@@ -224,11 +248,15 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
             <p className="hero-explain">{hero.score.explanation}</p>
 
             <div className="hero-actions">
-              <Button variant="primary" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || budget?.exceeded}>
+              <Button variant="primary" size="lg" onClick={beginGenerate} disabled={generate.isPending || budget?.exceeded}>
                 {generate.isPending ? 'Generating…' : 'Generate again'}
               </Button>
-              <Button size="lg" onClick={() => save.mutate(result)} disabled={save.isPending}>
-                {save.isPending ? 'Saving…' : `Save ${result.tickets.length > 1 ? `all ${result.tickets.length}` : 'ticket'}`}
+              <Button size="lg" onClick={() => save.mutate(result)} disabled={save.isPending || save.isSuccess}>
+                {save.isPending
+                  ? 'Saving…'
+                  : save.isSuccess
+                    ? 'Saved'
+                    : `Save ${result.tickets.length > 1 ? `all ${result.tickets.length}` : 'ticket'}`}
               </Button>
             </div>
           </div>
@@ -356,7 +384,7 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
               : 'No history loaded yet — visit the Data tab to sync official results.'}
           </p>
           <div className="hero-actions">
-            <Button variant="primary" size="lg" onClick={() => generate.mutate()} disabled={generate.isPending || budget?.exceeded}>
+            <Button variant="primary" size="lg" onClick={beginGenerate} disabled={generate.isPending || budget?.exceeded}>
               {generate.isPending ? 'Generating…' : 'Generate numbers'}
             </Button>
           </div>
@@ -373,5 +401,5 @@ export function GeneratePage({ games, gameId, setGameId }: Props) {
 }
 
 function parseNumbers(s: string): number[] {
-  return s.split(/[^0-9]+/).map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  return (s.match(/\d+/g) ?? []).map(Number);
 }

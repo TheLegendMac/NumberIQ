@@ -1,13 +1,15 @@
 import type { GameDefinition, GameId, GeneratedTicket, StrategyDefinition, Ticket, Draw, StrategyId } from '@numberiq/shared';
-import {
-  getGame, computeStats, runRandomnessAudit, generateTickets, estimatePopularity,
-} from '@numberiq/shared';
 import type { BacktestProgress } from './backtest.worker.js';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set('Accept', 'application/json');
+  if (init?.body !== undefined && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers,
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
@@ -190,13 +192,18 @@ export const api = {
   importFile: (id: GameId, filename: string, contentBase64: string) =>
     post<IngestReport & { mapping: Record<string, string> }>(`/data/${id}/import`, { filename, contentBase64 }),
 
-  stats: async (id: GameId, slot: string, window?: number): Promise<StatsResponse> =>
-    computeStats(getGame(id), slot, await fetchDraws(id, slot), window) as unknown as StatsResponse,
+  stats: async (id: GameId, slot: string, window?: number): Promise<StatsResponse> => {
+    const { computeStats, getGame } = await import('@numberiq/shared');
+    return computeStats(getGame(id), slot, await fetchDraws(id, slot), window) as unknown as StatsResponse;
+  },
 
-  randomness: async (id: GameId, slot: string): Promise<RandomnessResponse> =>
-    runRandomnessAudit(getGame(id), slot, await fetchDraws(id, slot)) as unknown as RandomnessResponse,
+  randomness: async (id: GameId, slot: string): Promise<RandomnessResponse> => {
+    const { getGame, runRandomnessAudit } = await import('@numberiq/shared');
+    return runRandomnessAudit(getGame(id), slot, await fetchDraws(id, slot)) as unknown as RandomnessResponse;
+  },
 
   generate: async (body: Record<string, unknown>): Promise<GenerateResponse> => {
+    const { generateTickets, getGame } = await import('@numberiq/shared');
     const gameId = body.gameId as GameId;
     const game = getGame(gameId);
     const slot = (body.slot as string) ?? game.slots[game.slots.length - 1]!;
@@ -247,17 +254,27 @@ export const api = {
     onProgress?: (p: { completed: number; total: number; label: string }) => void,
     signal?: AbortSignal,
   ): Promise<BacktestResponse> => {
+    if (signal?.aborted) {
+      throw Object.assign(new Error('Backtest cancelled'), { cancelled: true });
+    }
+    const { getGame } = await import('@numberiq/shared');
     const gameId = body.gameId as GameId;
     const game = getGame(gameId);
     const slot = (body.slot as string) ?? game.slots[game.slots.length - 1]!;
     const draws = [...(await fetchDraws(gameId, slot))].sort((a, b) => a.drawDate.localeCompare(b.drawDate));
+
+    // Cancellation may happen while drawing history is still loading. Abort
+    // before allocating a Worker if that request has already been superseded.
+    if (signal?.aborted) {
+      throw Object.assign(new Error('Backtest cancelled'), { cancelled: true });
+    }
 
     const worker = new Worker(new URL('./backtest.worker.ts', import.meta.url), { type: 'module' });
 
     return new Promise<BacktestResponse>((resolve, reject) => {
       const cleanup = () => { worker.terminate(); signal?.removeEventListener('abort', onAbort); };
       const onAbort = () => { cleanup(); reject(Object.assign(new Error('Backtest cancelled'), { cancelled: true })); };
-      signal?.addEventListener('abort', onAbort);
+      signal?.addEventListener('abort', onAbort, { once: true });
 
       worker.onmessage = (e: MessageEvent<BacktestProgress>) => {
         const msg = e.data;
@@ -289,8 +306,10 @@ export const api = {
 
   recent: recentDraws,
 
-  popularity: async (id: GameId, slot: string, numbers: number[]) =>
-    estimatePopularity(getGame(id), numbers, { recentDraws: (await fetchDraws(id, slot)).slice(0, 100) }),
+  popularity: async (id: GameId, slot: string, numbers: number[]) => {
+    const { estimatePopularity, getGame } = await import('@numberiq/shared');
+    return estimatePopularity(getGame(id), numbers, { recentDraws: (await fetchDraws(id, slot)).slice(0, 100) });
+  },
 
   tickets: () => request<Array<Ticket & { result: { payout: number; matches: number; tier: string | null } | null }>>('/tickets'),
   saveTickets: (tickets: unknown[]) => post<{ ids: number[]; saved: number }>('/tickets', tickets),

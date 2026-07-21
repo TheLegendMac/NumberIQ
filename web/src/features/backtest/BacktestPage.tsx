@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 import type { GameId } from '@numberiq/shared';
@@ -22,30 +22,35 @@ export function BacktestPage({ games, gameId, setGameId }: Props) {
   const [selected, setSelected] = useState<string[]>(['balanced', 'hot', 'overdue']);
   const [maxDraws, setMaxDraws] = useState(500);
   const [progress, setProgress] = useState<{ completed: number; total: number; label: string } | null>(null);
+  const [resultKey, setResultKey] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const currentSlot = game.slots.includes(slot) ? slot : game.slots[game.slots.length - 1]!;
   const strategies = useQuery({ queryKey: ['strategies', gameId], queryFn: () => api.strategies(gameId) });
+  const configKey = JSON.stringify([gameId, currentSlot, [...selected].sort(), maxDraws]);
 
   const run = useMutation({
-    mutationFn: () => {
+    mutationFn: ({ body }: { key: string; body: Record<string, unknown> }) => {
       abortRef.current?.abort();
       const ctrl = new AbortController();
       abortRef.current = ctrl;
       setProgress({ completed: 0, total: 1, label: 'Starting…' });
-      return api.backtest(
-        {
-          gameId, slot: currentSlot, strategies: selected,
-          ticketsPerDraw: 1, maxDraws, minHistory: 200, nullReplications: 300, seed: 12345,
-        },
-        setProgress,
-        ctrl.signal,
-      );
+      return api.backtest(body, setProgress, ctrl.signal);
     },
+    onSuccess: (_result, variables) => setResultKey(variables.key),
     onSettled: () => setProgress(null),
   });
 
-  const result = run.data;
+  useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    run.reset();
+    setResultKey(null);
+    setProgress(null);
+    return () => abortRef.current?.abort();
+  }, [configKey]);
+
+  const result = resultKey === configKey ? run.data : undefined;
   const allSame = result?.strategies.every((s) => s.verdict === 'not_distinguishable') ?? false;
   const toggle = (id: string) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -66,6 +71,7 @@ export function BacktestPage({ games, gameId, setGameId }: Props) {
                 const next = e.target.value as GameId;
                 setGameId(next);
                 setSlot(games.find((x) => x.id === next)!.slots.slice(-1)[0]!);
+                setSelected(['balanced', 'hot', 'overdue']);
               }}
               style={{ minWidth: 170 }}
             >
@@ -89,7 +95,17 @@ export function BacktestPage({ games, gameId, setGameId }: Props) {
           {run.isPending ? (
             <Button onClick={() => abortRef.current?.abort()}>Cancel</Button>
           ) : (
-            <Button variant="primary" onClick={() => run.mutate()} disabled={selected.length === 0}>
+            <Button
+              variant="primary"
+              onClick={() => run.mutate({
+                key: configKey,
+                body: {
+                  gameId, slot: currentSlot, strategies: selected,
+                  ticketsPerDraw: 1, maxDraws, minHistory: 200, nullReplications: 300, seed: 12345,
+                },
+              })}
+              disabled={selected.length === 0 || strategies.isLoading}
+            >
               Run backtest
             </Button>
           )}
@@ -101,6 +117,7 @@ export function BacktestPage({ games, gameId, setGameId }: Props) {
             {strategies.data?.map((s) => (
               <button
                 key={s.id}
+                type="button"
                 onClick={() => toggle(s.id)}
                 className={`chip ${selected.includes(s.id) ? 'chip-accent' : ''}`}
                 style={{ cursor: 'pointer' }}
@@ -121,13 +138,20 @@ export function BacktestPage({ games, gameId, setGameId }: Props) {
                 {Math.round((progress.completed / Math.max(1, progress.total)) * 100)}%
               </span>
             </div>
-            <Meter value={(progress.completed / Math.max(1, progress.total)) * 100} />
+            <Meter
+              value={(progress.completed / Math.max(1, progress.total)) * 100}
+              label={progress.label}
+            />
             <p className="inline-note" style={{ marginTop: 6 }}>
               Running in a background thread — the page stays responsive.
             </p>
           </div>
         )}
       </Card>
+
+      {strategies.isError && (
+        <div style={{ marginTop: 14 }}><ErrorBox error={strategies.error} /></div>
+      )}
 
       {run.isError && !(run.error as { cancelled?: boolean }).cancelled && (
         <div style={{ marginTop: 14 }}><ErrorBox error={run.error} /></div>

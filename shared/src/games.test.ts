@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GAMES, GAME_LIST, expectedValuePerTicket, strategiesForGame, hasSharedPrizes } from './games.js';
 import { choose, totalCombinations, waysToMatch } from './math.js';
+import { saveTicketSchema } from './schemas.js';
 
 /**
  * These tests recompute every published odds figure from the game matrix. If the
@@ -124,5 +125,40 @@ describe('honesty invariants', () => {
     for (const s of cosmetic) {
       expect(s.disclosure.toLowerCase(), s.id).toMatch(/does not change|fallacy/);
     }
+  });
+});
+
+describe('saved ticket validation', () => {
+  const valid = {
+    gameId: 'fantasy5' as const,
+    numbers: [1, 8, 16, 24, 36],
+    extras: {},
+    strategy: 'balanced',
+    score: 72,
+    cost: 1,
+    drawSlot: 'evening',
+    targetDrawDate: '2026-07-21',
+  };
+
+  it('accepts a valid ticket', () => {
+    expect(saveTicketSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it.each([
+    [{ ...valid, numbers: [1, 8, 16, 24] }, 'wrong number count'],
+    [{ ...valid, numbers: [1, 8, 16, 24, 40] }, 'out-of-range number'],
+    [{ ...valid, numbers: [1, 8, 16, 24, 24] }, 'duplicate combination number'],
+    [{ ...valid, drawSlot: 'overnight' }, 'unknown drawing slot'],
+    [{ ...valid, strategy: 'unpopular', gameId: 'pick3', numbers: [0, 1, 2], drawSlot: 'evening' }, 'unavailable strategy'],
+    [{ ...valid, cost: 0 }, 'client-supplied cost mismatch'],
+  ])('rejects %s (%s)', (input) => {
+    expect(saveTicketSchema.safeParse(input).success).toBe(false);
+  });
+
+  it('validates the extra ball against the target drawing era', () => {
+    expect(saveTicketSchema.safeParse({
+      gameId: 'powerball', numbers: [1, 8, 16, 24, 36], extras: { powerball: 27 },
+      strategy: 'balanced', score: null, cost: 2, drawSlot: 'main', targetDrawDate: '2026-07-21',
+    }).success).toBe(false);
   });
 });

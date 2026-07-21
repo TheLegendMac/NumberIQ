@@ -6,7 +6,7 @@ import { api, money, pct, dateLabel, slotLabel, type GameSummary } from '../../l
 
 /** A saved ticket as `/tickets` returns it — with its result already attached. */
 type HeldTicket = Awaited<ReturnType<typeof api.tickets>>[number];
-import { Card, Chip, Stat, Skeleton, EmptyState, Ball, Fold, Button, Meter } from '../../components/ui.js';
+import { Card, Chip, Stat, Skeleton, EmptyState, Ball, Fold, Button, Meter, ErrorBox } from '../../components/ui.js';
 import { Reading } from '../../components/Term.js';
 
 interface Props { games: GameSummary[]; go: (route: string) => void }
@@ -23,8 +23,14 @@ const LAST_VISIT_KEY = 'numberiq-last-visit';
  */
 function usePreviousVisit(): string | null {
   const previous = useRef<string | null | undefined>(undefined);
-  if (previous.current === undefined) previous.current = localStorage.getItem(LAST_VISIT_KEY);
-  useEffect(() => { localStorage.setItem(LAST_VISIT_KEY, new Date().toISOString()); }, []);
+  if (previous.current === undefined) {
+    try { previous.current = localStorage.getItem(LAST_VISIT_KEY); }
+    catch { previous.current = null; }
+  }
+  useEffect(() => {
+    try { localStorage.setItem(LAST_VISIT_KEY, new Date().toISOString()); }
+    catch { /* storage can be unavailable */ }
+  }, []);
   return previous.current;
 }
 
@@ -106,6 +112,11 @@ export function TodayPage({ games, go }: Props) {
         </div>
         <p>Where you stand, what has drawn, and what is next. Everything else is a click away.</p>
       </header>
+
+      {tracker.isError && <ErrorBox error={tracker.error} />}
+      {tickets.isError && <ErrorBox error={tickets.error} />}
+      {settings.isError && <ErrorBox error={settings.error} />}
+      {results.isError && <ErrorBox error={results.error} />}
 
       {/* ---------------- Results ---------------- */}
       <Card
@@ -318,7 +329,7 @@ function AllGameResults({ games }: { games: GameSummary[] }) {
     .filter((x): x is { game: GameSummary; slot: string } => x.slot !== null);
 
   const all = useQuery({
-    queryKey: ['today-all-results'],
+    queryKey: ['today-all-results', targets.map(({ game, slot }) => `${game.id}:${slot}`).join(',')],
     staleTime: 5 * 60_000,
     queryFn: async () =>
       (await Promise.all(
@@ -329,6 +340,7 @@ function AllGameResults({ games }: { games: GameSummary[] }) {
   });
 
   if (all.isLoading) return <Skeleton rows={5} />;
+  if (all.isError) return <ErrorBox error={all.error} />;
   if (!all.data?.length) return <p className="inline-note">No drawings loaded yet.</p>;
 
   return (

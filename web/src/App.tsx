@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, type GameSummary } from './lib/api.js';
 import { TodayPage } from './features/today/TodayPage.js';
@@ -28,6 +28,15 @@ const NAV: Array<{ id: Route; label: string; icon: string }> = [
   { id: 'data', label: 'Data', icon: '⛁' },
 ];
 
+const readStoredTheme = (): 'dark' | 'light' | null => {
+  try {
+    const saved = localStorage.getItem('numberiq-theme');
+    return saved === 'dark' || saved === 'light' ? saved : null;
+  } catch {
+    return null;
+  }
+};
+
 function useHashRoute(): [Route, (r: Route) => void] {
   const read = (): Route => {
     const h = window.location.hash.replace('#/', '') as Route;
@@ -45,25 +54,36 @@ function useHashRoute(): [Route, (r: Route) => void] {
 
 export function App() {
   const [route, go] = useHashRoute();
+  const initialRoute = useRef(true);
   const [gameId, setGameId] = useState<GameId>('fantasy5');
   // Follow the OS on first run; an explicit toggle is remembered thereafter.
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-    const saved = localStorage.getItem('numberiq-theme');
-    if (saved === 'dark' || saved === 'light') return saved;
+    const saved = readStoredTheme();
+    if (saved) return saved;
     return window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   });
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('numberiq-theme', theme);
+    try { localStorage.setItem('numberiq-theme', theme); } catch { /* storage can be unavailable */ }
   }, [theme]);
 
-  // Keyboard shortcuts: 1-5 jump between sections, G generates.
+  useEffect(() => {
+    document.title = `${NAV.find((item) => item.id === route)?.label ?? 'NumberIQ'} — NumberIQ`;
+    if (initialRoute.current) {
+      initialRoute.current = false;
+      return;
+    }
+    document.getElementById('main-content')?.focus();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [route]);
+
+  // Keyboard shortcuts: 1-6 jump between sections, G opens Generate.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+      if (el?.closest('input, select, textarea, button, a, [contenteditable="true"]')) return;
 
       const index = Number(e.key);
       if (index >= 1 && index <= NAV.length) {
@@ -82,8 +102,18 @@ export function App() {
 
   return (
     <div className="shell">
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
+      >
+        Skip to main content
+      </a>
       <nav className="rail" aria-label="Main">
-        <button className="brand" onClick={() => go('today')} aria-label="NumberIQ — go to Today">
+        <button type="button" className="brand" onClick={() => go('today')} aria-label="NumberIQ — go to Today">
           <span className="brand-mark" aria-hidden="true">IQ</span>
           <span className="brand-text">
             NumberIQ
@@ -93,6 +123,7 @@ export function App() {
         {NAV.map((n) => (
           <button
             key={n.id}
+            type="button"
             className="nav-item"
             aria-current={route === n.id ? 'page' : undefined}
             onClick={() => go(n.id)}
@@ -103,6 +134,7 @@ export function App() {
         ))}
         <div className="spacer" />
         <button
+          type="button"
           className="nav-item nav-theme"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
@@ -112,7 +144,7 @@ export function App() {
         </button>
       </nav>
 
-      <main className="main">
+      <main className="main" id="main-content" tabIndex={-1}>
         <div className="content">
           {games.isLoading && <Skeleton rows={4} />}
           {games.isError && <ErrorBox error={games.error} />}

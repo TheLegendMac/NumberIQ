@@ -57,7 +57,7 @@ export function checkPendingTickets(db: Database.Database): { checked: number; w
       payout: ev.payout,
     });
     checked++;
-    if (ev.payout > 0) won++;
+    if (ev.tier) won++;
   }
   return { checked, won };
 }
@@ -84,7 +84,7 @@ export function summarize(db: Database.Database): TrackerSummary {
     s.tickets++;
     s.spend += t.cost;
     s.winnings += payout;
-    if (payout > 0) s.wins++;
+    if (r?.tier !== null && r?.tier !== undefined) s.wins++;
     strategyMap.set(t.strategy, s);
 
     const g = gameMap.get(t.gameId) ?? { tickets: 0, spend: 0, winnings: 0 };

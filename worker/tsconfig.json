@@ -2,12 +2,12 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
-    "types": ["@cloudflare/workers-types"],
+    "types": [],
     "noEmit": true,
     "composite": false,
     "moduleResolution": "bundler",
     "paths": { "@numberiq/shared": ["../shared/src/index.ts"] },
     "baseUrl": "."
   },
-  "include": ["src"]
+  "include": ["src", "worker-configuration.d.ts"]
 }

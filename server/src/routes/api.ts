@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import {
   GAME_LIST, getGame, isGameId, strategiesForGame, STRATEGIES,
-  expectedValuePerTicket, evLowerBound, matrixForDate,
+  expectedValuePerTicket, evLowerBound, currentEraStart,
   generateRequestSchema, backtestRequestSchema, saveTicketSchema, settingsSchema,
   type GameId, type StrategyId,
 } from '@numberiq/shared';
@@ -87,6 +87,44 @@ api.get('/strategies', (req, res) => {
   res.json(STRATEGIES);
 });
 
+/**
+ * Counts for the all-games frequency overview. Keeping this aggregation in
+ * SQLite avoids transferring the entire draw archive just to count numbers.
+ */
+api.get('/frequency', (_req, res) => {
+  const db = getDb();
+  const out = [];
+
+  for (const game of GAME_LIST) {
+    const since = currentEraStart(game);
+    const args = since ? [game.id, since] : [game.id];
+    const rows = db.prepare(
+      `SELECT json_each.value AS n, COUNT(*) AS count
+         FROM draws, json_each(draws.numbers)
+        WHERE draws.game_id = ? ${since ? 'AND draws.draw_date >= ?' : ''}
+        GROUP BY n ORDER BY n`,
+    ).all(...args) as Array<{ n: number; count: number }>;
+    const meta = db.prepare(
+      `SELECT COUNT(*) AS drawCount, MIN(draw_date) AS first, MAX(draw_date) AS last
+         FROM draws WHERE game_id = ? ${since ? 'AND draw_date >= ?' : ''}`,
+    ).get(...args) as { drawCount: number; first: string | null; last: string | null };
+
+    if (!rows.length || !meta.first || !meta.last) continue;
+    out.push({
+      gameId: game.id,
+      name: game.name,
+      kind: game.kind,
+      drawCount: meta.drawCount,
+      from: meta.first,
+      to: meta.last,
+      eraStart: since,
+      counts: rows.map((row) => ({ n: Number(row.n), count: Number(row.count) })),
+    });
+  }
+
+  res.json(out);
+});
+
 // --- Data / ingest ---------------------------------------------------------
 
 api.get('/data/:gameId', (req, res) => {
@@ -129,7 +167,10 @@ api.post('/data/:gameId/import', h(async (req, res) => {
 api.get('/draws/:gameId', (req, res) => {
   const gameId = requireGame(req);
   const slot = resolveSlot(gameId, req.query.slot);
-  const limit = Math.min(Number(req.query.limit ?? 100), 2000);
+  const requested = Number(req.query.limit ?? 100);
+  const limit = Number.isFinite(requested)
+    ? Math.max(1, Math.min(Math.floor(requested), 20_000))
+    : 100;
   res.json({ slot, draws: new DrawRepository(getDb()).list(gameId, slot, limit) });
 });
 
@@ -252,6 +293,14 @@ api.get('/tickets', (req, res) => {
 api.post('/tickets', (req, res) => {
   const body = z.union([saveTicketSchema, z.array(saveTicketSchema)]).parse(req.body);
   const list = Array.isArray(body) ? body : [body];
+  if (list.length === 0) {
+    res.status(400).json({ error: 'no_tickets', message: 'At least one ticket is required.' });
+    return;
+  }
+  if (list.length > 200) {
+    res.status(413).json({ error: 'too_many_tickets', message: 'Too many tickets in one request (max 200).' });
+    return;
+  }
   const repo = new TicketRepository(getDb());
   const ids = list.map((t) =>
     repo.insert({
@@ -266,6 +315,10 @@ api.post('/tickets', (req, res) => {
 
 api.delete('/tickets/:id', (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: 'invalid_ticket_id', message: 'Ticket id must be a positive integer.' });
+    return;
+  }
   const ok = new TicketRepository(getDb()).remove(id);
   res.status(ok ? 204 : 404).end();
 });

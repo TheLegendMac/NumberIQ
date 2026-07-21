@@ -1,34 +1,42 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQueries, useQueryClient, useQuery } from '@tanstack/react-query';
 import type { GameId } from '@numberiq/shared';
-import { api, dateLabel, slotLabel, type GameSummary, type IngestReport } from '../../lib/api.js';
-import { Button, Card, Chip, Notice, Skeleton } from '../../components/ui.js';
+import { api, dateLabel, invalidateDraws, slotLabel, type GameSummary, type IngestReport } from '../../lib/api.js';
+import { Button, Card, Chip, Notice, Skeleton, ErrorBox } from '../../components/ui.js';
 
 export function DataPage({ games }: { games: GameSummary[] }) {
   const qc = useQueryClient();
   // Where the data actually lives changes what this page can honestly claim.
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, staleTime: 5 * 60_000 });
   const hosted = health.data?.runtime === 'cloudflare-workers';
+  const local = health.isSuccess && !hosted;
   const [report, setReport] = useState<(IngestReport & { mapping?: Record<string, string> }) | null>(null);
   const [busy, setBusy] = useState<GameId | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [importTarget, setImportTarget] = useState<GameId | null>(null);
+  const [operationError, setOperationError] = useState<Error | null>(null);
 
   const dataQueries = useQueries({
     queries: games.map((g) => ({ queryKey: ['data', g.id], queryFn: () => api.data(g.id) })),
   });
 
   const invalidate = () => {
+    invalidateDraws();
     void qc.invalidateQueries({ queryKey: ['games'] });
     void qc.invalidateQueries({ queryKey: ['data'] });
     void qc.invalidateQueries({ queryKey: ['stats'] });
+    void qc.invalidateQueries({ queryKey: ['randomness'] });
+    void qc.invalidateQueries({ queryKey: ['frequency'] });
+    void qc.invalidateQueries({ queryKey: ['today-results'] });
+    void qc.invalidateQueries({ queryKey: ['today-all-results'] });
   };
 
   const sync = useMutation({
     mutationFn: (id: GameId) => api.sync(id, true),
-    onMutate: (id) => setBusy(id),
+    onMutate: (id) => { setBusy(id); setOperationError(null); },
     onSettled: () => setBusy(null),
     onSuccess: (r) => { setReport(r); invalidate(); },
+    onError: (error) => setOperationError(error),
   });
 
   const importFile = useMutation({
@@ -41,16 +49,27 @@ export function DataPage({ games }: { games: GameSummary[] }) {
       }
       return api.importFile(id, file.name, btoa(binary));
     },
+    onMutate: ({ id }) => { setBusy(id); setOperationError(null); },
+    onSettled: () => setBusy(null),
     onSuccess: (r) => { setReport(r); invalidate(); },
+    onError: (error) => setOperationError(error),
   });
 
   const syncAll = async () => {
+    setOperationError(null);
+    const failures: string[] = [];
     for (const g of games) {
       setBusy(g.id);
-      try { await api.sync(g.id, true); } catch { /* reported per-game below */ }
+      try {
+        const result = await api.sync(g.id, true);
+        setReport(result);
+      } catch (error) {
+        failures.push(`${g.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
     setBusy(null);
     invalidate();
+    if (failures.length) setOperationError(new Error(failures.join(' · ')));
   };
 
   return (
@@ -58,11 +77,21 @@ export function DataPage({ games }: { games: GameSummary[] }) {
       <header className="page-head">
         <h1>Data</h1>
         <p>
-          {hosted
+          {health.isLoading
+            ? 'Checking where drawing history is stored…'
+            : hosted
             ? 'Official Florida Lottery history, stored in your own Cloudflare D1 database.'
-            : 'Official Florida Lottery history, stored locally. Nothing leaves your machine.'}
+            : local
+              ? 'Official Florida Lottery history, stored locally. Nothing leaves your machine.'
+              : 'Drawing-history storage could not be reached.'}
         </p>
       </header>
+
+      {health.isError && <ErrorBox error={health.error} />}
+      {operationError && <ErrorBox error={operationError} />}
+      {dataQueries.some((query) => query.isError) && (
+        <ErrorBox error={new Error('One or more game summaries could not be loaded.')} />
+      )}
 
       {hosted && (
         <div style={{ marginBottom: 14 }}>
@@ -78,10 +107,12 @@ export function DataPage({ games }: { games: GameSummary[] }) {
 
       <Card
         title="Sources"
-        sub={hosted
-          ? 'Published to D1 from a local ingest run. Syncing and importing are disabled here.'
-          : "Downloaded from the Florida Lottery's own published winning-number history files."}
-        actions={hosted ? undefined : <Button onClick={syncAll} disabled={busy !== null}>Sync all games</Button>}
+        sub={!health.isSuccess
+          ? 'Waiting for the data runtime before enabling maintenance actions.'
+          : hosted
+            ? 'Published to D1 from a local ingest run. Syncing and importing are disabled here.'
+            : "Downloaded from the Florida Lottery's own published winning-number history files."}
+        actions={local ? <Button onClick={syncAll} disabled={busy !== null}>Sync all games</Button> : undefined}
       >
         <div className="table-scroll">
           <table>
@@ -124,7 +155,9 @@ export function DataPage({ games }: { games: GameSummary[] }) {
                     <td className="t-right">
                       {hosted
                         ? <span className="inline-note">local only</span>
+                        : !local ? <span className="inline-note">checking…</span>
                         : q?.isLoading ? '…'
+                        : q?.isError ? <Chip tone="warn">Unavailable</Chip>
                         : missing === 0 ? <Chip tone="pos">None</Chip>
                         : <Chip tone="warn">{missing}</Chip>}
                     </td>
@@ -132,12 +165,14 @@ export function DataPage({ games }: { games: GameSummary[] }) {
                       <div className="row-tight" style={{ justifyContent: 'flex-end' }}>
                         {hosted ? (
                           <span className="inline-note">read-only</span>
+                        ) : !local ? (
+                          <span className="inline-note">checking…</span>
                         ) : (
                           <>
                             <Button size="sm" onClick={() => sync.mutate(g.id)} disabled={busy !== null}>
                               {busy === g.id ? 'Syncing…' : 'Sync'}
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setImportTarget(g.id); fileInput.current?.click(); }}>
+                            <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => { setImportTarget(g.id); fileInput.current?.click(); }}>
                               Import
                             </Button>
                           </>
@@ -206,12 +241,6 @@ export function DataPage({ games }: { games: GameSummary[] }) {
               </p>
             )}
           </Card>
-        </div>
-      )}
-
-      {importFile.isError && (
-        <div style={{ marginTop: 14 }}>
-          <Notice><strong>Import failed.</strong> {(importFile.error as Error).message}</Notice>
         </div>
       )}
 

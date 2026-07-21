@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { nextDrawing, formatCountdown, describeSchedule } from '@numberiq/shared';
 import { api, money, pct, dateLabel, slotLabel, type GameSummary } from '../../lib/api.js';
-import { Button, Card, Chip, Field, Input, Stat, Skeleton, EmptyState, Ball, Fold } from '../../components/ui.js';
+import { Button, Card, Chip, Field, Input, Stat, Skeleton, EmptyState, Ball, Fold, ErrorBox, Meter } from '../../components/ui.js';
 import { Term, Reading } from '../../components/Term.js';
 
 export function TicketsPage({ games }: { games: GameSummary[] }) {
@@ -59,6 +59,12 @@ export function TicketsPage({ games }: { games: GameSummary[] }) {
         <h1>Tickets</h1>
         <p>Where you actually stand. Saved tickets are checked automatically once results land.</p>
       </header>
+
+      {tracker.isError && <ErrorBox error={tracker.error} />}
+      {tickets.isError && <ErrorBox error={tickets.error} />}
+      {settings.isError && <ErrorBox error={settings.error} />}
+      {saveBudget.isError && <ErrorBox error={saveBudget.error} />}
+      {remove.isError && <ErrorBox error={remove.error} />}
 
       {tracker.isLoading && <Card><Skeleton rows={4} /></Card>}
 
@@ -155,6 +161,7 @@ export function TicketsPage({ games }: { games: GameSummary[] }) {
                   {saveBudget.isPending ? 'Saving…' : 'Save'}
                 </Button>
               </div>
+              {saveBudget.isSuccess && <p className="inline-note" role="status">Budget saved.</p>}
 
               {budget && (
                 <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
@@ -208,6 +215,7 @@ export function TicketsPage({ games }: { games: GameSummary[] }) {
               {tickets.data.map((ticket) => {
                 const game = games.find((g) => g.id === ticket.gameId);
                 const won = ticket.result && ticket.result.payout > 0;
+                const unvaluedWin = ticket.result && ticket.result.payout === 0 && ticket.result.tier !== null;
                 return (
                   <div className="ticket-row" key={ticket.id}>
                     <div className="ticket-row-nums">
@@ -232,12 +240,17 @@ export function TicketsPage({ games }: { games: GameSummary[] }) {
                       {ticket.result ? (
                         won
                           ? <Chip tone="pos">Won {money(ticket.result.payout)}</Chip>
+                          : unvaluedWin
+                            ? <Chip tone="pos">Hit {ticket.result.tier} · verify prize</Chip>
                           : <Chip>{ticket.result.matches} matched</Chip>
                       ) : (
                         <Chip tone="warn">Waiting</Chip>
                       )}
                       <Button size="sm" variant="ghost" className="btn-danger"
-                        onClick={() => remove.mutate(ticket.id)} aria-label="Delete ticket">✕</Button>
+                        onClick={() => remove.mutate(ticket.id)}
+                        disabled={remove.isPending}
+                        aria-label={`Delete ${game?.name ?? ticket.gameId} ticket ${ticket.numbers.join('-')}`}
+                      >✕</Button>
                     </div>
                   </div>
                 );
@@ -259,9 +272,7 @@ function BudgetBar({ label, spent, limit }: { label: string; spent: number; limi
         <span style={{ fontSize: 12.5, color: 'var(--muted)' }}>{label}</span>
         <span className="num" style={{ fontSize: 12.5 }}>{money(spent)} of {money(limit)}</span>
       </div>
-      <div className="meter">
-        <div className="meter-fill" style={{ width: `${ratio * 100}%`, background: tone }} />
-      </div>
+      <Meter value={ratio * 100} tone={tone} />
     </div>
   );
 }

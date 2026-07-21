@@ -38,6 +38,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
           {error.stack ? `\n\n${error.stack.split('\n').slice(1, 6).join('\n')}` : ''}
         </pre>
         <button
+          type="button"
           className="btn btn-primary"
           style={{ marginTop: 16 }}
           onClick={() => window.location.reload()}

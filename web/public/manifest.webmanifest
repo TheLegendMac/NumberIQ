@@ -2,7 +2,7 @@
   "name": "NumberIQ — Florida Lottery Analytics",
   "short_name": "NumberIQ",
   "description": "Statistically honest Florida Lottery analytics. Local-first, no accounts.",
-  "start_url": "/#/generate",
+  "start_url": "/#/today",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, ReferenceLine } from 'recharts';
 import type { GameId } from '@numberiq/shared';
 import { api, dateLabel, slotLabel, type GameSummary } from '../../lib/api.js';
-import { Card, Chip, Field, Notice, Select, Skeleton, Tabs, EmptyState, Ball, Fold } from '../../components/ui.js';
+import { Card, Chip, Field, Notice, Select, Skeleton, Tabs, EmptyState, Ball, Fold, ErrorBox } from '../../components/ui.js';
 import { Term, Reading } from '../../components/Term.js';
 import { readPValue, readZ } from '../../lib/glossary.js';
 
@@ -103,6 +103,7 @@ export function AnalyzePage({ games, gameId, setGameId }: Props) {
       />
 
       {stats.isLoading && <Card><Skeleton rows={6} /></Card>}
+      {stats.isError && <ErrorBox error={stats.error} />}
       {s && s.drawCount === 0 && <EmptyState title="No drawings loaded">Sync this game on the Data tab first.</EmptyState>}
 
       {s && s.drawCount > 0 && (
@@ -122,7 +123,11 @@ export function AnalyzePage({ games, gameId, setGameId }: Props) {
                   </div>
                 </div>
 
-                <div style={{ height: 250 }}>
+                <div
+                  style={{ height: 250 }}
+                  role="img"
+                  aria-label={`Bar chart of how often each number appeared in ${game.name}`}
+                >
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={s.numbers} margin={{ top: 6, right: 6, left: -16, bottom: 0 }}>
                       <CartesianGrid stroke="var(--grid)" vertical={false} />
@@ -251,7 +256,9 @@ export function AnalyzePage({ games, gameId, setGameId }: Props) {
                             <td><span className="row-tight"><Ball n={p.a} size="sm" /><Ball n={p.b} size="sm" /></span></td>
                             <td className="t-right num">{p.count}</td>
                             <td className="t-right num" style={{ color: 'var(--muted)' }}>{p.expected.toFixed(1)}</td>
-                            <td className="t-right num">+{(p.count - p.expected).toFixed(1)}</td>
+                            <td className="t-right num">
+                              {p.count - p.expected >= 0 ? '+' : ''}{(p.count - p.expected).toFixed(1)}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -275,6 +282,7 @@ export function AnalyzePage({ games, gameId, setGameId }: Props) {
           {tab === 'audit' && (
             <div className="grid" style={{ gap: 16 }}>
               {audit.isLoading && <Card><Skeleton rows={5} /></Card>}
+              {audit.isError && <ErrorBox error={audit.error} />}
               {audit.data && (
                 <>
                   <div className="verdict">
@@ -347,7 +355,11 @@ function NumberList({ items, render }: {
 
 function SimpleBars({ data }: { data: Array<{ label: string; count: number }> }) {
   return (
-    <div style={{ height: 185 }}>
+    <div
+      style={{ height: 185 }}
+      role="img"
+      aria-label={data.map((item) => `${item.label}: ${item.count}`).join(', ')}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
           <CartesianGrid stroke="var(--grid)" vertical={false} />

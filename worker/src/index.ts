@@ -18,16 +18,23 @@ import {
   type Draw, type GameId, type Ticket,
   currentEraStart,
 } from '@numberiq/shared';
+import { ZodError } from 'zod';
 
-export interface Env {
-  DB: D1Database;
-  ASSETS: Fetcher;
-}
+const SECURITY_HEADERS = {
+  'content-security-policy': "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; manifest-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+  'referrer-policy': 'no-referrer',
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+} as const;
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      ...SECURITY_HEADERS,
+    },
   });
 
 const bad = (message: string, status = 400) => json({ error: 'request_failed', message }, status);
@@ -51,6 +58,13 @@ interface TicketRow {
   id: number; game_id: string; numbers: string; extras: string; strategy: string;
   score: number | null; cost: number; draw_slot: string;
   target_draw_date: string | null; note: string | null; created_at: string;
+}
+
+interface PendingTicketRow extends TicketRow {
+  draw_id: number;
+  draw_numbers: string;
+  draw_extras: string;
+  draw_source: string;
 }
 
 const toTicket = (r: TicketRow): Ticket => ({
@@ -77,10 +91,15 @@ function resolveSlot(gameId: GameId, requested: string | null): string {
 /** Check any saved ticket whose target drawing now exists. Idempotent. */
 async function checkPending(env: Env): Promise<{ checked: number }> {
   const { results } = await env.DB.prepare(
-    `SELECT t.* FROM tickets t
+    `SELECT t.*, d.id AS draw_id, d.numbers AS draw_numbers,
+            d.extras AS draw_extras, d.source AS draw_source
+       FROM tickets t
+       JOIN draws d ON d.game_id = t.game_id
+                   AND d.draw_slot = t.draw_slot
+                   AND d.draw_date = t.target_draw_date
      WHERE t.target_draw_date IS NOT NULL
        AND NOT EXISTS (SELECT 1 FROM ticket_results r WHERE r.ticket_id = t.id)`,
-  ).all<TicketRow>();
+  ).all<PendingTicketRow>();
 
   if (!results?.length) return { checked: 0 };
 
@@ -88,10 +107,15 @@ async function checkPending(env: Env): Promise<{ checked: number }> {
   for (const row of results) {
     const t = toTicket(row);
     if (!t.targetDrawDate) continue;
-    const draw = await env.DB.prepare(
-      `SELECT * FROM draws WHERE game_id = ? AND draw_slot = ? AND draw_date = ?`,
-    ).bind(t.gameId, t.drawSlot, t.targetDrawDate).first<DrawRow>();
-    if (!draw) continue;
+    const draw: DrawRow = {
+      id: row.draw_id,
+      game_id: row.game_id,
+      draw_date: t.targetDrawDate,
+      draw_slot: row.draw_slot,
+      numbers: row.draw_numbers,
+      extras: row.draw_extras,
+      source: row.draw_source,
+    };
 
     const ev = evaluateTicket(getGame(t.gameId), t, toDraw(draw));
     stmts.push(
@@ -161,7 +185,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   const seg = path.split('/').filter(Boolean);
 
   // --- health -------------------------------------------------------------
-  if (path === '/health') {
+  if (path === '/health' && method === 'GET') {
     const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM draws`).first<{ n: number }>();
     return json({ ok: true, draws: row?.n ?? 0, runtime: 'cloudflare-workers' });
   }
@@ -261,7 +285,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   if (seg[0] === 'draws' && seg[1] && method === 'GET') {
     if (!isGameId(seg[1])) return bad(`Unknown game "${seg[1]}"`);
     const slot = resolveSlot(seg[1], url.searchParams.get('slot'));
-    const limit = Math.min(Number(url.searchParams.get('limit') ?? 20000), 20000);
+    const requested = Number(url.searchParams.get('limit') ?? 20_000);
+    const limit = Number.isFinite(requested)
+      ? Math.max(1, Math.min(Math.floor(requested), 20_000))
+      : 100;
     const { results } = await env.DB.prepare(
       `SELECT * FROM draws WHERE game_id = ? AND draw_slot = ? ORDER BY draw_date DESC LIMIT ?`,
     ).bind(seg[1], slot, limit).all<DrawRow>();
@@ -317,8 +344,10 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   if (path === '/tickets' && method === 'POST') {
     const body = await request.json();
-    const list = (Array.isArray(body) ? body : [body]).map((t) => saveTicketSchema.parse(t));
-    if (list.length > 200) return bad('Too many tickets in one request (max 200)', 413);
+    const rawList = Array.isArray(body) ? body : [body];
+    if (rawList.length === 0) return bad('At least one ticket is required');
+    if (rawList.length > 200) return bad('Too many tickets in one request (max 200)', 413);
+    const list = rawList.map((ticket) => saveTicketSchema.parse(ticket));
 
     const stmts = list.map((t) =>
       env.DB.prepare(
@@ -329,16 +358,19 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         t.strategy, t.score, t.cost, t.drawSlot, t.targetDrawDate, t.note ?? null,
       ),
     );
-    await env.DB.batch(stmts);
+    const writes = await env.DB.batch(stmts);
     await checkPending(env);
-    return json({ saved: list.length }, 201);
+    return json({ ids: writes.map((write) => write.meta.last_row_id), saved: list.length }, 201);
   }
 
   if (seg[0] === 'tickets' && seg[1] && method === 'DELETE') {
     const id = Number(seg[1]);
-    if (!Number.isInteger(id)) return bad('Invalid ticket id');
+    if (!Number.isInteger(id) || id <= 0) return bad('Ticket id must be a positive integer');
     const r = await env.DB.prepare(`DELETE FROM tickets WHERE id = ?`).bind(id).run();
-    return new Response(null, { status: r.meta.changes > 0 ? 204 : 404 });
+    return new Response(null, {
+      status: r.meta.changes > 0 ? 204 : 404,
+      headers: SECURITY_HEADERS,
+    });
   }
 
   // --- tracker ------------------------------------------------------------
@@ -367,7 +399,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
       const s = byStrategy.get(r.strategy) ?? { tickets: 0, spend: 0, winnings: 0, wins: 0 };
       s.tickets++; s.spend += r.cost; s.winnings += r.payout;
-      if (r.payout > 0) s.wins++;
+      if (r.tier !== null) s.wins++;
       byStrategy.set(r.strategy, s);
 
       const g = byGame.get(r.game_id) ?? { tickets: 0, spend: 0, winnings: 0 };
@@ -422,11 +454,21 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname.startsWith('/api')) {
+    if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       try {
         return await handleApi(request, env, url);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        if (err instanceof ZodError) {
+          return json({
+            error: 'validation_failed',
+            message: 'Request did not match the expected shape.',
+            issues: err.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+          }, 400);
+        }
+        if (err instanceof SyntaxError) {
+          return bad('Request body must be valid JSON');
+        }
         // Surface a missing schema clearly rather than as an opaque 500.
         if (/no such table/i.test(message)) {
           return json({
@@ -434,11 +476,23 @@ export default {
             message: 'D1 has no schema yet. Run: npx wrangler d1 migrations apply numberiq --remote',
           }, 503);
         }
-        console.error('[numberiq]', err);
-        return json({ error: 'request_failed', message }, 500);
+        console.error(JSON.stringify({
+          message: 'request_failed',
+          method: request.method,
+          path: url.pathname,
+          error: message,
+        }));
+        return json({ error: 'request_failed', message: 'The request could not be completed.' }, 500);
       }
     }
 
-    return env.ASSETS.fetch(request);
+    const response = await env.ASSETS.fetch(request);
+    const headers = new Headers(response.headers);
+    for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   },
 } satisfies ExportedHandler<Env>;
