@@ -35,6 +35,11 @@ export interface PrizeTier {
   label: string;
   /** Fixed prize in dollars, or null when pari-mutuel / jackpot. */
   prize: number | null;
+  /**
+   * Human prize text for display when a single dollar figure would misrepresent
+   * the win — e.g. Cash Pop's per-ticket multiplier. Overrides the derived label.
+   */
+  prizeLabel?: string;
   /** 1-in-N odds for this exact tier. */
   oneIn: number;
   /** True when `prize` is a historical average or estimate rather than a posted amount. */
@@ -178,7 +183,8 @@ export type StrategyId =
   | 'cold'
   | 'overdue'
   | 'frequency_weighted'
-  | 'contrarian';
+  | 'contrarian'
+  | 'most_frequent';
 
 export interface StrategyDefinition {
   id: StrategyId;

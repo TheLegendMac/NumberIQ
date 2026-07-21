@@ -175,3 +175,33 @@ describe('Strategy Score honesty', () => {
     expect(trivial.total).toBeLessThan(ordinary.total);
   });
 });
+
+describe('most_frequent strategy', () => {
+  it('overwhelmingly picks the numbers drawn most across full history', () => {
+    // Numbers 2, 9, 14, 21, 30 appear in every draw; nothing else is ever drawn.
+    const hotSet = [2, 9, 14, 21, 30];
+    const history = Array.from({ length: 120 }, (_, i) => ({
+      id: i,
+      gameId: 'fantasy5' as const,
+      drawDate: `2020-01-${String((i % 28) + 1).padStart(2, '0')}`,
+      drawSlot: 'evening',
+      numbers: hotSet,
+      extras: {},
+      source: 'test',
+    }));
+
+    let fromHot = 0;
+    let total = 0;
+    for (let seed = 0; seed < 40; seed++) {
+      const { tickets } = generateTickets({
+        game: fantasy5, history, strategy: 'most_frequent', count: 1, seed, batchMode: 'independent',
+      });
+      for (const n of tickets[0]!.numbers) {
+        total++;
+        if (hotSet.includes(n)) fromHot++;
+      }
+    }
+    // The most-drawn numbers should dominate — this is a deterministic-feeling mode.
+    expect(fromHot / total).toBeGreaterThan(0.85);
+  });
+});

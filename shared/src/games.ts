@@ -72,7 +72,7 @@ export const GAMES: Record<GameId, GameDefinition> = {
     topPrizeOneIn: 15,
     overallOneIn: 15,
     prizeTiers: [
-      { match: 1, label: 'Match', prize: null, oneIn: 15, estimated: true, isJackpot: true },
+      { match: 1, label: 'Match your number', prize: null, prizeLabel: '5×–250× your bet', oneIn: 15, estimated: true, isJackpot: true },
     ],
     sourceFile: 'cp',
     drawsPerWeek: 35,
@@ -328,6 +328,23 @@ export function hasSharedPrizes(g: GameDefinition): boolean {
 }
 
 /**
+ * One-line "how to play" summary, derived from the live game matrix so it can
+ * never drift from the odds table it sits beside. Drawing days and times are
+ * described separately by describeSchedule(), which owns the timing data.
+ */
+export function howToPlay(g: GameDefinition): string {
+  const price = `$${g.basePrice} per play`;
+  if (g.kind === 'digits') {
+    return `Pick ${g.pick} numbers from ${g.min} to ${g.max}, in order. ${price} for a straight bet.`;
+  }
+  const main = `${g.pick} number${g.pick === 1 ? '' : 's'} from ${g.min} to ${g.max}`;
+  const extra = g.extraBall
+    ? `, plus 1 ${g.extraBall.label} from ${g.extraBall.min} to ${g.extraBall.max}`
+    : '';
+  return `Pick ${main}${extra}. ${price}.`;
+}
+
+/**
  * Expected value of one base-price ticket, from posted prize amounts only.
  * Returns null when the dominant tiers are pari-mutuel/jackpot and no honest
  * point estimate exists — we decline rather than invent one.
@@ -356,78 +373,88 @@ export function evLowerBound(g: GameDefinition): number {
 
 export const STRATEGIES: StrategyDefinition[] = [
   {
-    id: 'unpopular',
-    name: 'Unpopular Numbers',
+    id: 'balanced',
+    name: 'Spread out (recommended)',
     class: 'ev_positive',
     description:
-      'Avoids the number patterns other players pick most — birthdays, low numbers, ' +
-      'lucky 7, straight lines on the playslip, arithmetic runs.',
+      'Picks numbers spread evenly across the board — a mix of high and low, odd and even, ' +
+      'and no obvious patterns — while gently steering away from combinations lots of people play.',
     disclosure:
-      'Does not change your odds of winning. In shared-prize games it raises how much ' +
-      'you would collect if you win, by reducing the chance of splitting with others.',
+      'It does not change your odds of winning. It builds well-spread tickets and, in shared-prize ' +
+      'games, slightly improves what you would collect if you win.',
+  },
+  {
+    id: 'unpopular',
+    name: 'Avoid popular numbers',
+    class: 'ev_positive',
+    description:
+      'Skips the numbers most people play — birthdays, 7, low numbers, straight lines on the ' +
+      'slip — so if you win, you split the prize with fewer other winners.',
+    disclosure:
+      'It does not change your odds of winning. In shared-prize games it raises how much you ' +
+      'would collect if you win, by making a split less likely.',
     requiresSharedPrizes: true,
   },
   {
-    id: 'balanced',
-    name: 'Balanced',
-    class: 'ev_positive',
-    description:
-      'Combines statistical spread (odd/even, high/low, sum near centre, no trivial ' +
-      'patterns) with moderate popularity avoidance.',
-    disclosure:
-      'Does not change your odds of winning. Produces well-distributed tickets and, in ' +
-      'shared-prize games, modestly improves expected payout.',
+    id: 'random',
+    name: 'Totally random',
+    class: 'neutral',
+    description: 'A plain random pick — exactly like a Quick Pick. Every combination is equally likely.',
+    disclosure: 'The honest baseline. Every combination has the same chance, which is true of every option here.',
   },
   {
-    id: 'random',
-    name: 'Pure Random',
-    class: 'neutral',
-    description: 'Uniform random selection. The mathematical baseline every other mode is measured against.',
-    disclosure: 'Every combination is equally likely. This is the honest default.',
+    id: 'most_frequent',
+    name: 'Most frequently drawn',
+    class: 'cosmetic',
+    description: 'Simply gives you the numbers that have been drawn the most times in this game’s whole history.',
+    disclosure:
+      'Every draw is independent, so numbers that came up often before are no more likely to come up ' +
+      'again. This does not change your odds or your expected value — it just hands you the most-drawn ' +
+      'numbers because you asked for them.',
   },
   {
     id: 'hot',
-    name: 'Hot Numbers',
+    name: 'Hot — drawn a lot lately',
     class: 'cosmetic',
-    description: 'Favours numbers drawn most often in the selected recent window.',
+    description: 'Leans toward the numbers that have come up most often in recent draws.',
     disclosure:
       'Draws are independent, so this does not change your odds or your expected value. ' +
       'Included because people want it — run a backtest to see it land inside the random band.',
   },
   {
     id: 'cold',
-    name: 'Cold Numbers',
+    name: 'Cold — barely drawn lately',
     class: 'cosmetic',
-    description: 'Favours numbers drawn least often in the selected recent window.',
+    description: 'Leans toward the numbers that have come up least often in recent draws.',
     disclosure:
       'Draws are independent, so this does not change your odds or your expected value. ' +
       'Included because people want it — run a backtest to see it land inside the random band.',
   },
   {
     id: 'overdue',
-    name: 'Overdue',
+    name: 'Overdue — missing the longest',
     class: 'cosmetic',
-    description: 'Favours numbers with the longest gap since their last appearance.',
+    description: 'Leans toward the numbers that haven’t been drawn for the longest stretch.',
     disclosure:
-      'This is the gambler\'s fallacy: a number that has not appeared is not "due". ' +
+      'This is the gambler’s fallacy: a number that hasn’t appeared is not “due”. ' +
       'It does not change your odds or expected value.',
   },
   {
     id: 'frequency_weighted',
-    name: 'Frequency Weighted',
+    name: 'Weighted by how often drawn',
     class: 'cosmetic',
-    description: 'Samples numbers with probability proportional to historical frequency.',
+    description: 'Leans toward numbers in proportion to how often they’ve come up in history, but still mixes it up.',
     disclosure:
-      'Historical frequency has no predictive power on independent draws. Does not change ' +
+      'Past frequency has no predictive power on independent draws. Does not change ' +
       'your odds or expected value.',
   },
   {
     id: 'contrarian',
-    name: 'Contrarian',
+    name: 'The rarely-drawn numbers',
     class: 'cosmetic',
-    description: 'Inverts historical frequency — favours the least-drawn numbers overall.',
+    description: 'Leans toward the numbers drawn least often across the game’s whole history.',
     disclosure:
-      'Historical frequency has no predictive power on independent draws. Does not change ' +
+      'Past frequency has no predictive power on independent draws. Does not change ' +
       'your odds or expected value.',
   },
 ];

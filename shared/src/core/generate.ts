@@ -73,6 +73,19 @@ export function strategyWeights(ctx: GenerateContext, pool: number[]): number[] 
 
   if (strategy === 'random') return pool.map(() => 1);
 
+  if (strategy === 'most_frequent') {
+    // "Just the most-drawn numbers": count over the *entire* history, not a
+    // recent window, and tilt steeply so the top numbers dominate every pick.
+    const total = new Map<number, number>(pool.map((v) => [v, 0]));
+    for (const d of ctx.history) {
+      for (const v of d.numbers) if (total.has(v)) total.set(v, total.get(v)! + 1);
+    }
+    const maxCount = Math.max(1, ...pool.map((v) => total.get(v) ?? 0));
+    // Tiny floor (never zero, so a valid ticket is always drawable) under a steep
+    // tilt, so the pick is dominated by the genuinely most-drawn numbers.
+    return pool.map((v) => 0.004 + Math.pow((total.get(v) ?? 0) / maxCount, 3));
+  }
+
   if (strategy === 'unpopular' || strategy === 'balanced') {
     // On fixed-payout games popularity is meaningless — fall back to uniform.
     if (game.payoutModel === 'fixed') return pool.map(() => 1);

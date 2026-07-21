@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  GAMES, GAME_LIST, expectedValuePerTicket, strategiesForGame, hasSharedPrizes, primaryDrawSlot,
+  GAMES, GAME_LIST, expectedValuePerTicket, strategiesForGame, hasSharedPrizes, primaryDrawSlot, howToPlay,
 } from './games.js';
 import { choose, totalCombinations, waysToMatch } from './math.js';
 import { saveTicketSchema } from './schemas.js';
@@ -168,5 +168,27 @@ describe('saved ticket validation', () => {
       gameId: 'powerball', numbers: [1, 8, 16, 24, 36], extras: { powerball: 27 },
       strategy: 'balanced', score: null, cost: 2, drawSlot: 'main', targetDrawDate: '2026-07-21',
     }).success).toBe(false);
+  });
+});
+
+describe('howToPlay', () => {
+  it('describes digit games as an ordered straight bet', () => {
+    expect(howToPlay(GAMES.pick3)).toBe('Pick 3 numbers from 0 to 9, in order. $1 per play for a straight bet.');
+  });
+
+  it('describes an extra-ball game with both pools and its price', () => {
+    expect(howToPlay(GAMES.powerball)).toBe('Pick 5 numbers from 1 to 69, plus 1 Powerball from 1 to 26. $2 per play.');
+  });
+
+  it('singularises a single-pick game', () => {
+    expect(howToPlay(GAMES.cashpop)).toBe('Pick 1 number from 1 to 15. $1 per play.');
+  });
+
+  it('states the pick count and price for every game', () => {
+    for (const g of GAME_LIST) {
+      const text = howToPlay(g);
+      expect(text).toContain(`$${g.basePrice} per play`);
+      expect(text.startsWith('Pick ')).toBe(true);
+    }
   });
 });

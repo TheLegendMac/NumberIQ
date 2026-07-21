@@ -112,7 +112,7 @@ export const generateRequestSchema = z.object({
   gameId: gameIdSchema,
   strategy: z.enum([
     'balanced', 'unpopular', 'random', 'hot', 'cold',
-    'overdue', 'frequency_weighted', 'contrarian',
+    'overdue', 'frequency_weighted', 'contrarian', 'most_frequent',
   ]),
   slot: z.string().default('main'),
   count: z.number().int().min(1).max(100).default(5),
